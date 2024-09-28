@@ -1,0 +1,52 @@
+# logging_config.yaml
+version: 1
+disable_existing_loggers: False
+
+formatters:
+  simple:
+    format: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    formatter: simple
+    level: DEBUG
+    stream: ext://sys.stdout
+
+  file_handler:
+    class: logging.handlers.RotatingFileHandler
+    formatter: simple
+    level: INFO
+    filename: "scraper.log"
+    maxBytes: 10485760  # 10MB
+    backupCount: 3
+
+loggers:
+  Flower_Data_Set:
+    level: DEBUG
+    handlers: [console, file_handler]
+    propagate: no
+
+  VLAD_Vector:
+    level: INFO
+    handlers: [console, file_handler]
+    propagate: no
+
+  Fisher_Vector:
+    level: INFO
+    handlers: [console, file_handler]
+    propagate: no
+
+  Image_Feature_Extractor:
+    level: DEBUG
+    handlers: [ console, file_handler]
+    propagate: no
+
+  Image_Processor:
+    level: WARNING
+    handlers: [ console, file_handler]
+    propagate: no
+
+root:
+  level: WARNING
+  handlers: [console]

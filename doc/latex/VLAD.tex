@@ -1,0 +1,34 @@
+%! Author = Nhat Huy Vu
+%! Date = 9/11/2024
+
+% Preamble
+
+\section*{Vector of Locally Aggregated Descriptors (VLAD)}
+
+\subsection*{Overview}
+The Vector of Locally Aggregated Descriptors (VLAD) is a feature encoding and pooling method commonly used in the field of computer vision, particularly for tasks involving image retrieval and classification. VLAD is an approach that aggregates feature descriptors extracted from an image into a compact representation.
+
+    \input{Scale-invariant Features}
+
+\subsection*{Mathematical Formulation of VLAD}
+Given an image, feature detection algorithms (e.g., SIFT or SURF) are first used to identify key points and compute corresponding descriptors. These descriptors are then assigned to the nearest cluster centers that have been precomputed using a clustering algorithm such as k-means on a training dataset.
+
+Let $x_i$ be a descriptor and $c_k$ be the nearest cluster center. The aggregation for a cluster $k$ is computed as follows:
+\begin{equation}
+V_k = \sum_{x_i \in k} (x_i - c_k)
+\end{equation}
+Where $V_k$ is the aggregated vector for cluster $k$, and the sum is over all descriptors $x_i$ assigned to cluster $k$. The resulting VLAD vector is the concatenation of all $V_k$ for each cluster center in the vocabulary. L2 Normalization
+is then applied to the VLAD vector.
+
+\subsection*{Processing Pipeline Using VLAD}
+The typical pipeline for processing an image using VLAD involves the following steps:
+\begin{enumerate}
+\item \textbf{Feature Detection and Description:} Extract descriptors from the image using a feature detector.
+\item \textbf{Descriptor Assignment:} Assign each descriptor to the nearest cluster center from a predefined set of centers (vocabulary).
+\item \textbf{Aggregation:} For each cluster center, aggregate the differences between the descriptors assigned to that cluster and the cluster center itself.
+\item \textbf{Normalization:} Normalize the resulting VLAD vector to enhance its robustness and improve similarity measurement during retrieval.
+\item \textbf{Post-Processing:} Optionally, further process the VLAD vector using techniques such as dimensionality reduction or whitening depending on the application.
+%\end{enumerate}
+
+
+
