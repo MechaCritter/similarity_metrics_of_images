@@ -8,8 +8,15 @@ import numpy as np
 import cv2
 from typing import List, Tuple
 
-from utils import get_centroids, ImageFeatureExtractor
-from logger_config import setup_logging
+# Append path to root. Delete at the end of the project.
+import os
+import sys
+codespace_path = os.path.abspath('..')
+sys.path.insert(0, codespace_path)
+##############################################
+
+from src.utils import get_centroids, ImageFeatureExtractor
+from src.logger_config import setup_logging
 
 setup_logging()
 
@@ -27,8 +34,6 @@ class BaseMetrics:
 
     :param image: The image for which to calculate the metrics.
     :type image: np.ndarray
-    :param num_clusters: The number of clusters to use for the KMeans clustering algorithm.
-    :type num_clusters: int
     :param norm_order: The order of the norm to use for normalization. Default is 2 (l2 norm will be applied in this case).
     :type norm_order: int
     :param power_norm_weight: The weight to apply to the power normalization. Default is 0.5.
@@ -58,7 +63,6 @@ class BaseMetrics:
     :vartype keypoints_labels: np.ndarray
     """
     image: np.ndarray = field(repr=False)
-    num_clusters: int = 16
     norm_order: int = 2
     power_norm_weight: float = 0.5
     epsilon: float = 1e-9
@@ -129,11 +133,15 @@ class VLAD(BaseMetrics):
 
     To retrieve to VLAD vector, simply call the `vector` attribute of the object.
 
+    :param num_clusters: The number of clusters to use for the KMeans clustering algorithm. Default is 16.
+    :type num_clusters: int
+
     **Attributes**:
 
     :ivar vector: The VLAD vector for the image. Dimension would be (num_clusters, 128) if flatten is False, else (num_clusters * 128,).
     :vartype vector: np.ndarray
     """
+    num_clusters: int = 16
     vector: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -180,6 +188,9 @@ class FischerVector(BaseMetrics):
     the Fisher vector dimensionality will be 2KD + K. Thus, its dimensionality is invariant to the number of descriptors/vectors.
     
     To retrieve the Fischer Vector, simply call the `vector` attribute of the object.
+
+    :param num_gaussians: The number of Gaussian components to use in the Gaussian Mixture Model (GMM). Default is 128.
+    :type num_gaussians: int
     
     **Attributes**:
 
@@ -188,6 +199,7 @@ class FischerVector(BaseMetrics):
     :ivar gmm: The Gaussian Mixture Model used to calculate the Fischer Vector.
     :vartype gmm: GaussianMixture
     """
+    num_gaussians: int = 128
     vector: np.ndarray = field(init=False)
     gmm: GaussianMixture = field(init=False)
 
@@ -200,7 +212,7 @@ class FischerVector(BaseMetrics):
         Compute the Fischer Vector for the image. The Fisher Vector is calculated using the
         Fisher Vector algorithm from the scikit-image library.
         """
-        self.gmm = GaussianMixture(n_components=self.num_clusters, random_state=0, covariance_type='diag')
+        self.gmm = GaussianMixture(n_components=self.num_gaussians, random_state=0, covariance_type='diag')
         self.gmm.fit(self.descriptors)
         
         # Extract the Fisher Vector
