@@ -8,13 +8,13 @@ import numpy as np
 import cv2
 from typing import List, Tuple
 
-from src.utils import get_centroids, ImageFeatureExtractor
-from src.logger_config import setup_logging
+from utils import get_centroids, ImageFeatureExtractor
+from logger_config import setup_logging
 
 setup_logging()
 
 _logger_vv = logging.getLogger("VLAD_Vector")
-_logger_fv = logging.getLogger("Fischer_Vector")
+_logger_fv = logging.getLogger("Fisher_Vector")
 
 @dataclass
 class BaseMetrics:
@@ -83,6 +83,7 @@ class BaseMetrics:
         if self.verbose:
             print(
                 "====================================\n"
+                "Vector Type: ", self.__class__.__name__, "\n"
                 "Keypoints data:\n"
                 "Number of keypoints: \n", len(self.keypoints), "\n"
                 "Keypoint angles: \n", [kp.angle for kp in self.keypoints], "\n"
@@ -175,7 +176,8 @@ class VLAD(BaseMetrics):
 @dataclass
 class FischerVector(BaseMetrics):
     """
-    Calculate the Fischer Vector for the given image.
+    Calculate the Fischer Vector for the given image. For D-dimensional input descriptors or vectors, and a K-mode GMM, 
+    the Fisher vector dimensionality will be 2KD + K. Thus, its dimensionality is invariant to the number of descriptors/vectors.
     
     To retrieve the Fischer Vector, simply call the `vector` attribute of the object.
     
@@ -202,9 +204,8 @@ class FischerVector(BaseMetrics):
         self.gmm.fit(self.descriptors)
         
         # Extract the Fisher Vector
-        self.vector = np.array(
-            [fisher_vector(np.array([descriptor]), self.gmm, alpha=self.power_norm_weight) for descriptor in self.descriptors]
-        )
+        self.vector = np.array([fisher_vector(self.descriptors, self.gmm, alpha=self.power_norm_weight)])
+
         _logger_fv.debug("Fisher vector before normalization: %s", self.vector)
 
         # Power normalization
@@ -233,7 +234,7 @@ if __name__ == "__main__":
     path_to_test_data = 'data/raw/test'
     flower_data = FlowerDataSet('data/raw/train', plot=True)
     img = flower_data[20]
-    vlad = VLAD(img[0], verbose=True)
+    #vlad = VLAD(img[0], verbose=True)
     fischer = FischerVector(img[0], verbose=True)
 
     
