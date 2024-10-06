@@ -26,7 +26,7 @@ _logger_fv = logging.getLogger("Fisher_Vector")
 @dataclass
 class BaseMetrics:
     """
-    Base class for metrics, including SIFT and SURF features. Used for VLAD and Fischer Vector calculations.
+    Base class for metrics, including SIFT features. Used for VLAD and Fischer Vector calculations.
 
     - **Note**: The keypoint centroids calculated in this class are the 2D coordinates of the keypoints (The keypoints themselves contain more information like angle, size, response, octave, and class_id).
 

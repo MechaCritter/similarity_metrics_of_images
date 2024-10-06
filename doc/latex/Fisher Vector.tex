@@ -1,0 +1,72 @@
+\subsection{Fisher Vector (FV)}
+
+The Fisher Vector (FV) extends the Bag-of-Words (BOW) model by encoding higher-order statistics, such as the first and second-order differences, instead of just counting the occurrences of visual words. This method is derived from the Fisher kernel framework, which describes a sample set's deviation from an average distribution. The distribution is typically modeled using a Gaussian Mixture Model (GMM).
+
+Given a set of \(T\) local descriptors \(X = \{x_t; t = 1, \ldots, T\}\) extracted from an image, we assume that the generation process of \(X\) can be modeled by an image-independent probability density function \(u_{\lambda}\) with parameters \(\lambda\). The Fisher vector \(G^{X}_{\lambda}\) is obtained by computing the gradient of the log-likelihood of the sample set \(X\) with respect to the parameters \(\lambda\):
+
+\[
+G^{X}_{\lambda} = \frac{1}{T} \nabla_{\lambda} \log u_{\lambda}(X)
+\]
+
+where \(G^{X}_{\lambda}\) describes how the set of descriptors \(X\) deviates from the generative model defined by \(u_{\lambda}\).
+
+### Fisher Kernel Framework
+
+Let \(X = \{x_t; t = 1, \ldots, T\}\) be a set of \(T\) local descriptors extracted from an image. Assuming that these descriptors are generated independently according to a probability density function \(u_{\lambda}\) with parameters \(\lambda\), the Fisher kernel is defined as:
+
+\[
+K(X, Y) = (G^{X}_{\lambda})^T F_{\lambda}^{-1} G^{Y}_{\lambda}
+\]
+
+where:
+- \(F_{\lambda}\) is the Fisher information matrix, defined by:
+
+\[
+F_{\lambda} = \mathbb{E}_{x \sim u_{\lambda}} \left[ \nabla_{\lambda} \log u_{\lambda}(x) \nabla_{\lambda} \log u_{\lambda}(x)^T \right]
+\]
+
+- \(G^{X}_{\lambda}\) is the Fisher vector after applying the Cholesky decomposition on \(F_{\lambda}^{-1} = L_{\lambda}^T L_{\lambda}\), and is computed as:
+
+\[
+G^{X}_{\lambda} = L_{\lambda} \nabla_{\lambda} \log u_{\lambda}(X)
+\]
+
+### Fisher Vector Representation
+
+Unlike the Vector of Locally Aggregated Descriptors (VLAD), which encodes each descriptor to a single cluster center, the Fisher vector encodes each descriptor to multiple Gaussian components (soft assignment). The
+probability of a descriptor \(x_t\) belonging to the \(i\)-th Gaussian is computed with the Gaussian Mixture Model (GMM). For more details, see ~\cite{viroli2017deep}.
+
+The Gaussian Mixture Model (GMM) is chosen for \(u_{\lambda}(x) = \sum_{i=1}^{K} w_i u_i(x)\), where \(w_i, \mu_i, \Sigma_i\) are the mixture weights, mean vectors, and variance matrices (assumed diagonal) of the Gaussian \(u_i\). The Fisher vector is computed by focusing on the gradient with respect to the mean:
+
+\[
+\gamma_t(i) = \frac{w_i u_i(x_t)}{\sum_{j=1}^{K} w_j u_j(x_t)}
+\]
+
+\[
+G^{X}_{i} = \frac{1}{T \sqrt{w_i}} \sum_{t=1}^{T} \gamma_t(i) \Sigma_i^{-1/2} (x_t - \mu_i)
+\]
+
+where:
+- \(\gamma_t(i)\) is the soft assignment of descriptor \(x_t\) to the \(i\)-th Gaussian.
+- \(w_i\), \(\mu_i\), and \(\Sigma_i\) are the weight, mean vector, and covariance matrix of the \(i\)-th Gaussian component.
+
+The final Fisher vector \(G^{X}_{\lambda}\) is the concatenation of the vectors \(G^{X}_{i}\) for \(i = 1, \ldots, K\), resulting in a \(Kd\)-dimensional vector. This vector captures both the occurrence and distributional properties of the local descriptors. 
+
+### Normalization
+
+The Fisher vector undergoes two normalization steps:
+
+1. **Power Normalization**: Apply a power normalization function independently to each component:
+
+\[
+f(z) = \text{sign}(z) |z|^\alpha, \quad \text{where } 0 \leq \alpha \leq 1
+\]
+
+2. **L2 Normalization**: Normalize the vector using the L2 norm to ensure unit length:
+
+\[
+G^{X}_{\lambda} = \frac{G^{X}_{\lambda}}{\|G^{X}_{\lambda}\|}
+\]
+
+These normalization steps help reduce the influence of bursty visual elements and improve the separability of the descriptors.
+

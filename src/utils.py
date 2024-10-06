@@ -5,13 +5,21 @@ from typing import List, Tuple
 import numpy as np
 import cv2
 from sklearn.cluster import KMeans
+from sklearn.metrics.pairwise import cosine_similarity
 import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Append path to root. Delete at the end of the project.
+import os
+import sys
+codespace_path = os.path.abspath('..')
+sys.path.insert(0, codespace_path)
+##############################################
 
 from src.logger_config import setup_logging
 
 setup_logging()
 
-# Rename this logger within each class where it's called
 _logger_ife = logging.getLogger("Image_Feature_Extractor")
 _logger_ip = logging.getLogger("Image_Processor")
 
@@ -74,6 +82,7 @@ def create_and_plot_synthetic_data(lower_limit: float, upper_limit: float, num_s
 
     return x, y
 
+@_check_is_numpy_image
 def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     """
     Get the indices of pixels that have at least one non-zero channel.
@@ -86,16 +95,14 @@ def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     """
     return tuple(np.argwhere(np.any(image != 0, axis=-1)))
 
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.image as mpimg
-
+@_check_is_numpy_image
 def plot_clusters_on_image(image: np.ndarray, 
                            data: np.ndarray, 
                            centroids: np.ndarray, 
                            labels: np.ndarray, 
                            keypoints: list[cv2.KeyPoint],
-                           show_centroid_coords: bool = False):
+                           show_centroid_coords: bool = False,
+                           show_centroid_labels: bool = False) -> None:
     """
     Plot two images with keypoints next to each other:
     - The left image shows which keypoint belongs to which cluster by using a color code.
@@ -111,6 +118,10 @@ def plot_clusters_on_image(image: np.ndarray,
     :type labels: np.ndarray
     :param keypoints: List of cv2.KeyPoint objects
     :type keypoints: list[cv2.KeyPoint]
+    :param show_centroid_coords: If True, display the coordinates of the centroids
+    :type show_centroid_coords: bool
+    :param show_centroid_labels: If True, display the labels of the centroids
+    :type show_centroid_labels: bool
     """
     
     # Convert image to rgb format
@@ -161,7 +172,12 @@ def plot_clusters_on_image(image: np.ndarray,
     # If show_centroid_coords is True, display the coordinates of the centroids
     if show_centroid_coords:
         for i, centroid in enumerate(centroids):
-            ax1.text(centroid[0], centroid[1], f"({centroid[0]:.2f}, {centroid[1]:.2f})", fontsize=6, color='black')
+            ax1.text(centroid[0], centroid[1], f"Centroid {i}: ({centroid[0]:.2f}, {centroid[1]:.2f})", fontsize=6, color='black')
+
+    # If show_centroid_labels is True, display the labels of the centroids
+    if show_centroid_labels:
+        for i, centroid in enumerate(centroids):
+            ax1.text(centroid[0], centroid[1], f"Cluster {i}", fontsize=6, color='black')
 
     img_with_keypoints = cv2.drawKeypoints(img, keypoints, None, flags=cv2.DRAW_MATCHES_FLAGS_DRAW_RICH_KEYPOINTS)
     ax2.imshow(img_with_keypoints)
@@ -174,6 +190,35 @@ def plot_clusters_on_image(image: np.ndarray,
     plt.subplots_adjust(wspace=0.5)
     plt.grid(False)
     plt.show()
+
+def plot_similarity_heatmap_between_2_vectors(vector1: np.ndarray, vector2: np.ndarray, **kwargs) -> None:
+    """
+    Plot a heatmap showing the similarity between two vectors. Use this method to compare similarity
+    between VLAD/Fisher vectors.
+
+    ***Note***: Make sure both vectors have shape `num_clusters x num_features`.
+
+    :param vector1: First (VLAD/Fisher) vector
+    :type vector1: np.ndarray
+    :param vector2: Second (VLAD/Fisher) vector
+    :type vector2: np.ndarray
+    **kwargs: Additional keyword arguments (currently available: `title`, `xlabel`, `ylabel`)
+    """
+    if not vector1.shape[1] == vector2.shape[1]:
+        raise ValueError(f"Both vectors must have the same number of features, but got {vector1.shape[1]} and {vector2.shape[1]} instead.")
+    if not isinstance(vector1, np.ndarray) or not isinstance(vector2, np.ndarray):
+        raise ValueError(f"Expected both vectors to be numpy arrays, but got {type(vector1)} and {type(vector2)} instead.")
+    # Calculate cosine similarity between the two vectors
+    similarity = cosine_similarity(vector1, vector2)
+    plt.figure(figsize=(10, 6))
+    sns.heatmap(similarity, annot=True, fmt=".2f", cmap="viridis",
+                xticklabels=[f"Cluster {i}" for i in range(vector1.shape[0])],
+                yticklabels=[f"Cluster {i}" for i in range(vector2.shape[0])],
+                             cbar_kws={"label": "Cosine Similarity"})
+    plt.title("Cosine Similarity Heatmap between Two Vectors") if "title" not in kwargs else plt.title(kwargs["title"])
+    plt.xlabel("Clusters of Image 1") if "xlabel" not in kwargs else plt.xlabel(kwargs["xlabel"])
+    plt.ylabel("Clusters of Image 2") if "ylabel" not in kwargs else plt.ylabel(kwargs["ylabel"])
+    plt.show() 
 
 def is_subset(list1, list2):
     """
@@ -213,6 +258,8 @@ class ImageProcessor:
 
     Please alwasys pass the image as the first argument to the function, since
     the decorator assumes that the first argument is the image.
+
+    ***Note***: Only use static methods in this class.
     """
     @staticmethod
     @_check_is_numpy_image
@@ -243,12 +290,22 @@ class ImageProcessor:
         if isinstance(dimensions, int):
             dimensions = (dimensions, dimensions)
         return cv2.resize(image, dimensions, interpolation=interpolation)
+    
+    @staticmethod
+    @_check_is_numpy_image
+    def sharpen(image, kernel=np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])):
+        """
+        Sharpens the given image using the given kernel.
+        """
+        return cv2.filter2D(image, -1, kernel)
 
 class ImageFeatureExtractor:
     """
     ***Note***: This class simply extracts features from the image without creating new ones
 
     Like the ImageProcessor class, please always pass the image as the first argument to the function.
+
+    ***Note***: Only use static methods in this class.
     """
     @staticmethod
     @_check_is_numpy_image

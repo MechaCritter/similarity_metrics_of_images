@@ -8,8 +8,6 @@
 \subsection*{Overview}
 The Vector of Locally Aggregated Descriptors (VLAD) is a feature encoding and pooling method commonly used in the field of computer vision, particularly for tasks involving image retrieval and classification. VLAD is an approach that aggregates feature descriptors extracted from an image into a compact representation.
 
-    \input{Scale-invariant Features}
-
 \subsection*{Mathematical Formulation of VLAD}
 Given an image, feature detection algorithms (e.g., SIFT or SURF) are first used to identify key points and compute corresponding descriptors. These descriptors are then assigned to the nearest cluster centers that have been precomputed using a clustering algorithm such as k-means on a training dataset.
 
@@ -26,9 +24,14 @@ The typical pipeline for processing an image using VLAD involves the following s
 \item \textbf{Feature Detection and Description:} Extract descriptors from the image using a feature detector.
 \item \textbf{Descriptor Assignment:} Assign each descriptor to the nearest cluster center from a predefined set of centers (vocabulary).
 \item \textbf{Aggregation:} For each cluster center, aggregate the differences between the descriptors assigned to that cluster and the cluster center itself.
-\item \textbf{Normalization:} Normalize the resulting VLAD vector to enhance its robustness and improve similarity measurement during retrieval.
-\item \textbf{Post-Processing:} Optionally, further process the VLAD vector using techniques such as dimensionality reduction or whitening depending on the application.
-%\end{enumerate}
+\item \textbf{Normalization:} Normalize the resulting VLAD vector to enhance its robustness and improve similarity measurement during retrieval. Normalization methods include L2 normalization and power normalization.
+\item \textbf{Post-Processing:} Optionally, further process the VLAD vector using techniques such as dimensionality reduction (PCA) or whitening depending on the application.
+\end{enumerate}
+
+The overall similary of two VLAD vectors can then be calculated as:
+\begin{equation}
+    \frac{1}{C^{(1)}} \sum_i (x_{k,i}^{(1)} - \mu_k)^T \cdot \frac{1}{C^{(2)}} \sum_j (x_{k,j}^{(2)} - \mu_k)
+\end{equation}
 
 
 

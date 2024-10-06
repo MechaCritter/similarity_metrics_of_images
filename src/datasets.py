@@ -8,14 +8,24 @@ import numpy as np
 from torch.utils.data import Dataset
 from torchvision.transforms import transforms
 
-from logger_config import setup_logging
+# Append path to root. Delete at the end of the project.
+import os
+import sys
+codespace_path = os.path.abspath('..')
+sys.path.insert(0, codespace_path)
+##############################################
+
+from src.logger_config import setup_logging
 
 setup_logging()
 
 class FlowerLabels(Enum):
-    no_flower = 0
-    flower = 1
-    unknown = 2
+    DAISY = 0
+    DANDELION = 1
+    ROSE = 2
+    SUNFLOWER = 3
+    TULIP = 4
+    UNKNOWN = 5
 
 class FlowerDataSet(Dataset):
     """
@@ -36,10 +46,13 @@ class FlowerDataSet(Dataset):
         :type test_data_dir: str
         :param transform: Transformation to apply to the images
         :type transform: torchvision.transforms.transforms
+        :param plot: Whether to plot the images
+        :type plot: bool
 
         :raises FileNotFoundError: If the train_data_dir does not exist
         """
         self._logger = logging.getLogger('Flower_Data_Set')
+        self._max_img_to_plot = 10
         self.plot: bool = plot
 
         if not os.path.exists(train_data_dir):
@@ -85,21 +98,49 @@ class FlowerDataSet(Dataset):
                 images.append({'image_path': image_path, 'label': label})
         return images
 
-    def _plot_image(self, image: np.ndarray):
+    def _plot_image(self, images_and_labels: list[tuple[np.ndarray]]) -> None:
         """
         Plot the image with its file path and label. Only call from inside.
         """
-        plt.imshow(image)
+
+        for i in range(len(images_and_labels)):
+            img, lbl = images_and_labels[i]
+            _, ax = plt.subplots()
+            ax.imshow(img)
+            ax.set_title(f"Label: {lbl}")
+            ax.axis('off')
+
         plt.show()
 
-    def __getitem__(self, index: int):
+    def __getitem__(self, indices: int | slice) -> list[tuple[np.ndarray, int]] | tuple[np.ndarray, int]:
         """
-        Get the image and label at the specified index. If `plot` is set to True, `plot_image` is called.
+        Get the images and labels at the specified index range. If `plot` is set to True, `plot_image` is called.
+
+        :param indices: Index or slice of the image to retrieve
+        :type index: int | slice
+
+        :return: A list containing tuples, each with an image and its label if a slice obj is passed. Otherwise, a single tuple is returned.
+        :rtype: list[tuple(np.ndarray, int)] | tuple(np.ndarray, int)
+        """
+        if isinstance(indices, slice):
+            imgs_and_lbl = [self.__get_single_item(index) for index in range(*indices.indices(len(self.train_images)))]
+        else:
+            imgs_and_lbl = self.__get_single_item(indices)
+        if self.plot:
+            if isinstance(indices, slice):
+                if len(imgs_and_lbl) > self._max_img_to_plot:
+                    self._logger.warning("Too many images to plot. Plotting only the first %s images", self._max_img_to_plot)
+                    self._plot_image(imgs_and_lbl[:self._max_img_to_plot]) 
+                else:
+                    self._plot_image(imgs_and_lbl)
+        return imgs_and_lbl
+    
+    def __get_single_item(self, index: int) -> tuple[np.ndarray, int]:
+        """
+        Gets a single image and label at the specified index. If `plot` is set to True, `plot_image` is called.
 
         :param index: Index of the image to retrieve
         :type index: int
-        :param plot: Whether to plot the image or not
-        :type plot: bool
 
         :return: Image and label at the specified index
         :rtype: tuple(np.ndarray, int)
@@ -108,7 +149,7 @@ class FlowerDataSet(Dataset):
         try:
             label = FlowerLabels[self.train_images[index]['label']].value
         except KeyError:
-            label = FlowerLabels.unknown.value
+            label = FlowerLabels.UNKNOWN.value
 
         self._logger.info("Retrieving image %s with label %s", image_path, label)
 
@@ -118,12 +159,10 @@ class FlowerDataSet(Dataset):
         if self.transform:
             image = self.transform(image)
 
-        if self.plot:
-            self._plot_image(image)
-
         return image, label
 
 
 if __name__ == "__main__":
     flower_data = FlowerDataSet(plot=True)
-    img = flower_data[20]
+    img = flower_data.test_images[0]
+    print(img)
