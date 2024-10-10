@@ -12,6 +12,7 @@ import seaborn as sns
 # Append path to root. Delete at the end of the project.
 import os
 import sys
+
 codespace_path = os.path.abspath('..')
 sys.path.insert(0, codespace_path)
 ##############################################
@@ -23,21 +24,23 @@ setup_logging()
 _logger_ife = logging.getLogger("Image_Feature_Extractor")
 _logger_ip = logging.getLogger("Image_Processor")
 
+
 # Decorators
 def _check_is_numpy_image(func: callable):
     def wrapper(image, *args, **kwargs):
         if not isinstance(image, np.ndarray):
             raise ValueError("Input image should be a numpy array")
         return func(image, *args, **kwargs)
+
     return wrapper
 
-def get_centroids(data: np.ndarray, num_clusters:int):
+def get_centroids(data: np.ndarray, num_clusters: int):
     """
     Get the centroids of the clusters using KMeans. `data`should best be a numpy array.
 
     :param data: Data to cluster
     :type data: np.ndarray
-    :num_clusters: Number of clusters
+    :param num_clusters: Number of clusters
     :type num_clusters: int
 
     :return: Centroids of the clusters, the corresponding labels and the locations of the centroids
@@ -48,7 +51,9 @@ def get_centroids(data: np.ndarray, num_clusters:int):
 
     return kmeans.cluster_centers_, kmeans.labels_
 
-def create_and_plot_synthetic_data(lower_limit: float, upper_limit: float, num_samples: int, plot_type: str = 'scatter'):
+
+def create_and_plot_synthetic_data(lower_limit: float, upper_limit: float, num_samples: int,
+                                   plot_type: str = 'scatter'):
     """
     Generates synthetic data and plots it.
 
@@ -95,11 +100,12 @@ def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     """
     return tuple(np.argwhere(np.any(image != 0, axis=-1)))
 
+
 @_check_is_numpy_image
-def plot_clusters_on_image(image: np.ndarray, 
-                           data: np.ndarray, 
-                           centroids: np.ndarray, 
-                           labels: np.ndarray, 
+def plot_clusters_on_image(image: np.ndarray,
+                           data: np.ndarray,
+                           centroids: np.ndarray,
+                           labels: np.ndarray,
                            keypoints: list[cv2.KeyPoint],
                            show_centroid_coords: bool = False,
                            show_centroid_labels: bool = False) -> None:
@@ -123,48 +129,49 @@ def plot_clusters_on_image(image: np.ndarray,
     :param show_centroid_labels: If True, display the labels of the centroids
     :type show_centroid_labels: bool
     """
-    
+
     # Convert image to rgb format
     img = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
-    
+
     # Define unique cluster labels
     unique_labels = np.unique(labels)
 
     # ### Delete this later ###
     # img = cv2.drawKeypoints(img, keypoints, None)
     # #########################
-    
+
     # Generate a color map with as many colors as unique clusters
     colors = plt.cm.get_cmap("tab20", len(unique_labels))
 
     # Create a figure with extra space on the right for the legend
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
-        
+
     # Display the image as the background
-    left, right, bottom, top = 0, img.shape[1], image.shape[0], 0 # Image is upside down on the y-axis when calling plt.imshow, hence bottom, top are flipped
+    left, right, bottom, top = 0, img.shape[1], image.shape[
+        0], 0  # Image is upside down on the y-axis when calling plt.imshow, hence bottom, top are flipped
     ax1.imshow(img, extent=[left, right, bottom, top])
-    
+
     # Plot each cluster with a different color
     for cluster_idx in unique_labels:
         # Select data points belonging to the current cluster
         cluster_data = data[labels == cluster_idx]
-        
-        ax1.scatter(cluster_data[:, 0], cluster_data[:, 1], 
-                    s=20, c=[colors(cluster_idx)], 
+
+        ax1.scatter(cluster_data[:, 0], cluster_data[:, 1],
+                    s=20, c=[colors(cluster_idx)],
                     label=f"Cluster {cluster_idx}", alpha=0.7)
-    
+
     # Plot the centroids in a different style
-    ax1.scatter(centroids[:, 0], centroids[:, 1], 
-                s=120, c='black', marker='x', 
+    ax1.scatter(centroids[:, 0], centroids[:, 1],
+                s=120, c='black', marker='x',
                 label='Centroids')
-    
+
     ax1.set_title("Clusters and Centroids on Image")
     ax1.set_xlabel("X-axis")
     ax1.set_ylabel("Y-axis")
-    
+
     # Keep axes in the range of the image size
     ax1.set_xlim(0, img.shape[1])
-    ax1.set_ylim(img.shape[0], 0) # Flip the y-axis to match the image orientation
+    ax1.set_ylim(img.shape[0], 0)  # Flip the y-axis to match the image orientation
 
     # Place legend outside the plot
     ax1.legend(loc='center left', bbox_to_anchor=(1, 0.5))
@@ -172,7 +179,8 @@ def plot_clusters_on_image(image: np.ndarray,
     # If show_centroid_coords is True, display the coordinates of the centroids
     if show_centroid_coords:
         for i, centroid in enumerate(centroids):
-            ax1.text(centroid[0], centroid[1], f"Centroid {i}: ({centroid[0]:.2f}, {centroid[1]:.2f})", fontsize=6, color='black')
+            ax1.text(centroid[0], centroid[1], f"Centroid {i}: ({centroid[0]:.2f}, {centroid[1]:.2f})", fontsize=6,
+                     color='black')
 
     # If show_centroid_labels is True, display the labels of the centroids
     if show_centroid_labels:
@@ -185,11 +193,12 @@ def plot_clusters_on_image(image: np.ndarray,
     ax2.set_xlabel("X-axis")
     ax2.set_ylabel("Y-axis")
     ax2.set_xlim(0, img.shape[1])
-    ax2.set_ylim(img.shape[0], 0) # Flip the y-axis to match the image orientation
+    ax2.set_ylim(img.shape[0], 0)  # Flip the y-axis to match the image orientation
 
     plt.subplots_adjust(wspace=0.5)
     plt.grid(False)
     plt.show()
+
 
 def plot_similarity_heatmap_between_2_vectors(vector1: np.ndarray, vector2: np.ndarray, **kwargs) -> None:
     """
@@ -205,20 +214,23 @@ def plot_similarity_heatmap_between_2_vectors(vector1: np.ndarray, vector2: np.n
     **kwargs: Additional keyword arguments (currently available: `title`, `xlabel`, `ylabel`)
     """
     if not vector1.shape[1] == vector2.shape[1]:
-        raise ValueError(f"Both vectors must have the same number of features, but got {vector1.shape[1]} and {vector2.shape[1]} instead.")
+        raise ValueError(
+            f"Both vectors must have the same number of features, but got {vector1.shape[1]} and {vector2.shape[1]} instead.")
     if not isinstance(vector1, np.ndarray) or not isinstance(vector2, np.ndarray):
-        raise ValueError(f"Expected both vectors to be numpy arrays, but got {type(vector1)} and {type(vector2)} instead.")
+        raise ValueError(
+            f"Expected both vectors to be numpy arrays, but got {type(vector1)} and {type(vector2)} instead.")
     # Calculate cosine similarity between the two vectors
     similarity = cosine_similarity(vector1, vector2)
     plt.figure(figsize=(10, 6))
     sns.heatmap(similarity, annot=True, fmt=".2f", cmap="viridis",
                 xticklabels=[f"Cluster {i}" for i in range(vector1.shape[0])],
                 yticklabels=[f"Cluster {i}" for i in range(vector2.shape[0])],
-                             cbar_kws={"label": "Cosine Similarity"})
+                cbar_kws={"label": "Cosine Similarity"})
     plt.title("Cosine Similarity Heatmap between Two Vectors") if "title" not in kwargs else plt.title(kwargs["title"])
     plt.xlabel("Clusters of Image 1") if "xlabel" not in kwargs else plt.xlabel(kwargs["xlabel"])
     plt.ylabel("Clusters of Image 2") if "ylabel" not in kwargs else plt.ylabel(kwargs["ylabel"])
-    plt.show() 
+    plt.show()
+
 
 def is_subset(list1, list2):
     """
@@ -232,9 +244,10 @@ def is_subset(list1, list2):
     :returns: True if list1 is a subset of list2, False otherwise
     :rtype: bool
     """
-    if len(list1)> len(list2):
+    if len(list1) > len(list2):
         raise ValueError("List1 must be have smaller or equal length than list2")
     return set(list1).issubset(list2)
+
 
 def convert_to_integers(list_of_tuples: List[Tuple[float, float]]) -> List[Tuple[int, int]]:
     """
@@ -246,6 +259,7 @@ def convert_to_integers(list_of_tuples: List[Tuple[float, float]]) -> List[Tuple
     :rtype: List[Tuple[int, int]]
     """
     return [(int(x), int(y)) for x, y in list_of_tuples]
+
 
 # Classes
 class ImageProcessor:
@@ -261,11 +275,12 @@ class ImageProcessor:
 
     ***Note***: Only use static methods in this class.
     """
+
     @staticmethod
     @_check_is_numpy_image
     def gaussian_blurr(image, kernel_size=3, sigma=1.0):
         _logger_ip.debug(f"This Gaussian kernel was used: \n"
-                      f"{cv2.getGaussianKernel(kernel_size, sigma) @ cv2.getGaussianKernel(kernel_size, sigma).T}")
+                         f"{cv2.getGaussianKernel(kernel_size, sigma) @ cv2.getGaussianKernel(kernel_size, sigma).T}")
         return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
 
     @staticmethod
@@ -290,7 +305,7 @@ class ImageProcessor:
         if isinstance(dimensions, int):
             dimensions = (dimensions, dimensions)
         return cv2.resize(image, dimensions, interpolation=interpolation)
-    
+
     @staticmethod
     @_check_is_numpy_image
     def sharpen(image, kernel=np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])):
@@ -298,6 +313,7 @@ class ImageProcessor:
         Sharpens the given image using the given kernel.
         """
         return cv2.filter2D(image, -1, kernel)
+
 
 class ImageFeatureExtractor:
     """
@@ -307,6 +323,7 @@ class ImageFeatureExtractor:
 
     ***Note***: Only use static methods in this class.
     """
+
     @staticmethod
     @_check_is_numpy_image
     def sift(image) -> Tuple[cv2.KeyPoint, np.ndarray]:
@@ -338,9 +355,9 @@ class ImageFeatureExtractor:
     @_check_is_numpy_image
     def difference_of_gaussian(image: np.ndarray,
                                num_intervals: int,
-                               num_octaves: int=1,
-                               sigma: float=1.6,
-                               plot: bool=False) -> list:
+                               num_octaves: int = 1,
+                               sigma: float = 1.6,
+                               plot: bool = False) -> list:
         """
         Calculates DoG for the given image.
 
@@ -353,7 +370,7 @@ class ImageFeatureExtractor:
         :return: List of octave images (the difference of gaussian images within each octave)
         :rtype: list
         """
-        k = 2 ** (1.0 / num_intervals) # Scale factor
+        k = 2 ** (1.0 / num_intervals)  # Scale factor
         octave_images = []
         octave_range = num_intervals + 3
 
@@ -379,7 +396,7 @@ class ImageFeatureExtractor:
 
             # Downsample the image by factor of 2 for the next octave
             _logger_ife.debug(f"Current image shape: {image.shape}")
-            image = ImageProcessor.resize(image, (image.shape[1]//2, image.shape[0]//2))
+            image = ImageProcessor.resize(image, (image.shape[1] // 2, image.shape[0] // 2))
 
         _logger_ife.debug("Total number of octave images: %s", len(octave_images))
         if plot:
@@ -398,15 +415,14 @@ class ImageFeatureExtractor:
             plt.show()
         return octave_images
 
+
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
     from datasets import FlowerDataSet
+
     flower_data = FlowerDataSet('data/raw/train')
     image = flower_data[20][0]
     octave_images = ImageFeatureExtractor.difference_of_gaussian(image,
-                                                                   num_intervals=5,
-                                                                   num_octaves=2,
-                                                                   plot=True)
-
-
-
+                                                                 num_intervals=5,
+                                                                 num_octaves=2,
+                                                                 plot=True)

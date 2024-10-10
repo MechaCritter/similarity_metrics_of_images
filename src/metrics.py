@@ -1,19 +1,12 @@
 from dataclasses import dataclass, field
 import logging
+import os
 
-from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 from skimage.feature import fisher_vector, learn_gmm
 import numpy as np
 import cv2
 from typing import List, Tuple
-
-# Append path to root. Delete at the end of the project.
-import os
-import sys
-codespace_path = os.path.abspath('..')
-sys.path.insert(0, codespace_path)
-##############################################
 
 from src.utils import get_centroids, ImageFeatureExtractor
 from src.logger_config import setup_logging
@@ -23,12 +16,11 @@ setup_logging()
 _logger_vv = logging.getLogger("VLAD_Vector")
 _logger_fv = logging.getLogger("Fisher_Vector")
 
+
 @dataclass
 class BaseMetrics:
     """
-    Base class for metrics, including SIFT features. Used for VLAD and Fischer Vector calculations.
-
-    - **Note**: The keypoint centroids calculated in this class are the 2D coordinates of the keypoints (The keypoints themselves contain more information like angle, size, response, octave, and class_id).
+    Base class for metrics. Used for VLAD and Fischer Vector calculations.
 
     - **Note**: All the attributes are read-only. They are calculated internally and should not be modified.
 
@@ -45,9 +37,7 @@ class BaseMetrics:
     :param verbose: Whether to print the keypoints data, descriptors, and other information. Default is False.
     :type verbose: bool
 
-    **Attributes**:
-    
-    :ivar keypoints: List of cv2.KeyPoint objects. 
+    :ivar keypoints: List of cv2.KeyPoint objects.
     :vartype keypoints: List[cv2.KeyPoint]
     :ivar keypoints_2d_coords: 2D coordinates of the keypoints on the image.
     :vartype keypoints_2d_coords: np.ndarray
@@ -68,7 +58,7 @@ class BaseMetrics:
     epsilon: float = 1e-9
     flatten: bool = False
     verbose: bool = False
-
+    num_clusters: int = 16
     keypoints: List[cv2.KeyPoint] = field(init=False, repr=False) 
     keypoints_2d_coords: np.ndarray = field(init=False) 
     descriptors: np.ndarray = field(init=False)
@@ -141,7 +131,6 @@ class VLAD(BaseMetrics):
     :ivar vector: The VLAD vector for the image. Dimension would be (num_clusters, 128) if flatten is False, else (num_clusters * 128,).
     :vartype vector: np.ndarray
     """
-    num_clusters: int = 16
     vector: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -243,10 +232,8 @@ class FischerVector(BaseMetrics):
 
 if __name__ == "__main__":
     from src.datasets import FlowerDataSet
-    path_to_test_data = 'data/raw/test'
-    flower_data = FlowerDataSet('data/raw/train', plot=True)
+    flower_data = FlowerDataSet(plot=True)
     img = flower_data[20]
-    #vlad = VLAD(img[0], verbose=True)
     fischer = FischerVector(img[0], verbose=True)
 
     
