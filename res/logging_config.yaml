@@ -28,17 +28,17 @@ loggers:
     propagate: no
 
   VLAD_Vector:
-    level: INFO
+    level: DEBUG
     handlers: [console, file_handler]
     propagate: no
 
   Fisher_Vector:
-    level: INFO
+    level: DEBUG
     handlers: [console, file_handler]
     propagate: no
 
   Image_Feature_Extractor:
-    level: DEBUG
+    level: WARNING
     handlers: [ console, file_handler]
     propagate: no
 
@@ -47,6 +47,15 @@ loggers:
     handlers: [ console, file_handler]
     propagate: no
 
+  Global_KMeans:
+    level: DEBUG
+    handlers: [console, file_handler]
+    propagate: no
+
+  Global_GMM:
+    level: DEBUG
+    handlers: [console, file_handler]
+    propagate: no
 root:
   level: WARNING
   handlers: [console]

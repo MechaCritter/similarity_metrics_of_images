@@ -1,0 +1,58 @@
+
+\documentclass{article}
+\usepackage{amsmath}
+\begin{document}
+
+\section*{Formulas for SSIM and MS-SSIM}
+
+\subsection*{1. SSIM Formula}
+
+\textbf{Formula}: 
+\begin{equation}
+\text{SSIM}(x, y) = \frac{(2\mu_x \mu_y + C_1)(2\sigma_{xy} + C_2)}{(\mu_x^2 + \mu_y^2 + C_1)(\sigma_x^2 + \sigma_y^2 + C_2)}
+\end{equation}
+
+\textbf{Where}:
+\begin{itemize}
+    \item $\mu_x$: Mean of image $x$, representing the luminance.
+    \item $\mu_y$: Mean of image $y$, representing the luminance.
+    \item $\sigma_x^2$: Variance of image $x$, representing the contrast.
+    \item $\sigma_y^2$: Variance of image $y$, representing the contrast.
+    \item $\sigma_{xy}$: Covariance between $x$ and $y$, representing the structural similarity.
+    \item $C_1$: Small constant to avoid instability when the denominator is near zero (typically $C_1 = (K_1 L)^2$).
+    \item $C_2$: Small constant to avoid instability when the denominator is near zero (typically $C_2 = (K_2 L)^2$).
+\end{itemize}
+
+\subsection*{2. MS-SSIM Formula}
+
+\textbf{Formula}: 
+\begin{equation}
+\text{MS-SSIM}(x, y) = [l_M(x, y)]^{\alpha_M} \prod_{j=1}^{M} [c_j(x, y)]^{\beta_j} [s_j(x, y)]^{\gamma_j}
+\end{equation}
+
+\textbf{Where}:
+\begin{itemize}
+    \item $l_M(x, y)$: Luminance comparison at the coarsest scale.
+    \item $c_j(x, y)$: Contrast comparison at scale $j$.
+    \item $s_j(x, y)$: Structure comparison at scale $j$.
+    \item $\alpha_M$: Exponent for luminance comparison at scale $M$, defining its relative importance.
+    \item $\beta_j$: Exponent for contrast comparison at scale $j$, defining its relative importance.
+    \item $\gamma_j$: Exponent for structure comparison at scale $j$, defining its relative importance.
+    \item $M$: Total number of scales.
+\end{itemize}
+
+\subsection*{3. Default Scale Weights}
+
+\textbf{Formula}: 
+\begin{equation}
+\text{Default Weights} = (0.0448, 0.2856, 0.3001, 0.2363, 0.1333)
+\end{equation}
+
+\textbf{Where}:
+\begin{itemize}
+    \item The values represent the relative importance of SSIM at different scales. These weights are empirically derived from human visual experiments.
+    \item The sum of the weights equals $1$.
+    \item Each value corresponds to one of the scales used in MS-SSIM.
+\end{itemize}
+
+\end{document}
