@@ -23,7 +23,7 @@ handlers:
 
 loggers:
   Data_Set:
-    level: INFO
+    level: DEBUG
     handlers: [console, file_handler]
     propagate: no
 

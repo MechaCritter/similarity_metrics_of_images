@@ -1,14 +1,13 @@
 import os
 from enum import Enum
 from typing import Optional
-from collections import Counter
 
 import cv2
 import torch
-import matplotlib.pyplot as plt
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-from torchvision.transforms import transforms
+import albumentations as A
+from albumentations.pytorch import ToTensorV2
 from dotenv import load_dotenv
 
 from src.config import *
@@ -21,6 +20,8 @@ class BaseDataset(Dataset):
     """
     Allows for quick access dataset images, simply provide the link to folder containing train and test images.
     """
+    purpose: str
+
     def __init__(self,
                  train_img_data_dir: str = TRAIN_IMG_DATA_PATH_EXCAVATOR,
                  validation_img_data_dir: Optional[str] = None,
@@ -28,10 +29,11 @@ class BaseDataset(Dataset):
                  train_mask_data_dir: Optional[str] = None,
                  validation_mask_data_dir: Optional[str] = None,
                  test_mask_data_dir: Optional[str] = None,
-                 transform: transforms = None,
+                 transform: A.Compose = None,
                  plot: bool = False,
                  verbose: bool = False,
                  purpose: str = 'train',
+                 return_type: str = 'image+mask',
                  class_colors: dict = None):
         """
         Class constructor. Remember to pass data to whether train or test data directory.
@@ -53,13 +55,14 @@ class BaseDataset(Dataset):
         """
         self._logger = logging.getLogger('Data_Set')
         self._logger.name = self.__class__.__name__
-        self._max_img_to_plot = 10
-        self._verbose = verbose
+        self.max_img_to_plot: int = 10
+        self.verbose: bool = verbose
         self.plot: bool = plot
-        self._purpose = purpose
+        self.return_type: str = return_type
+        self.purpose: str = purpose
         self._class_colors = class_colors
 
-        self._logger.debug(f"Initializing BaseDataset with purpose: {self._purpose}")
+        self._logger.debug(f"Initializing BaseDataset with purpose: {self.purpose}")
         self._logger.debug(f"Train image data directory: {train_img_data_dir}")
         self._logger.debug(f"Validation image data directory: {validation_img_data_dir}")
         self._logger.debug(f"Test image data directory: {test_img_data_dir}")
@@ -78,14 +81,13 @@ class BaseDataset(Dataset):
         self.test_mask_data_dir = test_mask_data_dir
 
         self.images = []
-        self.mask_annots = []
+        self.masks = []
+        self.labels = []
 
-        self.transform: transforms = transform
+        self.transform: A.Compose = transform
 
         # Method calls
         self.load_images()
-        if train_mask_data_dir:
-            self.load_masks()
 
     @property
     def class_colors(self) -> dict:
@@ -97,37 +99,19 @@ class BaseDataset(Dataset):
 
         :raises ValueError: If the purpose is not 'train', 'validation' or 'test'
         """
-        match self._purpose:
+        match self.purpose:
             case 'train':
-                self.images = self._load_from_dir(self.train_img_data_dir)
+                self._load_from_dir(self.train_img_data_dir, annot_data_dir=self.train_mask_data_dir)
             case 'validation':
-                self.images = self._load_from_dir(self.validation_img_data_dir)
+                self._load_from_dir(self.validation_img_data_dir, annot_data_dir=self.validation_mask_data_dir)
             case 'test':
-                self.images = self._load_from_dir(self.test_img_data_dir)
+                self._load_from_dir(self.test_img_data_dir, annot_data_dir=self.test_mask_data_dir)
             case _:
                 raise ValueError(f"Purpose has to be 'train', 'validation' or 'test'.")
-        if self._verbose:
-            self._logger.info("Loaded %s images with purpose '%s'", len(self.images), self._purpose)
+        if self.verbose:
+            self._logger.info("Loaded %s images with purpose '%s'", len(self.images), self.purpose)
 
-    def load_masks(self):
-        """
-        Load the masks from the directories. Called upon initialization of the class.
-
-        :raises ValueError: If the purpose is not 'train', 'validation' or 'test'
-        """
-        match self._purpose:
-            case 'train':
-                self.mask_annots = self._load_from_dir(self.train_mask_data_dir, key='mask_path')
-            case 'validation':
-                self.mask_annots = self._load_from_dir(self.validation_mask_data_dir, key='mask_path')
-            case 'test':
-                self.mask_annots = self._load_from_dir(self.test_mask_data_dir, key='mask_path')
-            case _:
-                raise ValueError(f"Purpose has to be 'train', 'validation' or 'test'.")
-        if self._verbose:
-            self._logger.info("Loaded %s masks with purpose '%s'", len(self.mask_annots), self._purpose)
-
-    def _load_from_dir(self, data_dir: str, key = 'image_path') -> None:
+    def _load_from_dir(self, data_dir: str, annot_data_dir: str=None) -> None:
         """
         Internal method used to pass the data directory and return a list that contain dictionaries of the image path and label.
 
@@ -138,13 +122,18 @@ class BaseDataset(Dataset):
         :return: A list of path to the images and their labels
         :rtype: list
         """
-        images = []
         for label in os.listdir(data_dir):
-            for image in os.listdir(os.path.join(data_dir, label)):
-                image_path = os.path.join(data_dir, label, image)
-                images.append({key: image_path, 'label': label})
+            for img_file in os.listdir(os.path.join(data_dir, label)):
+                if img_file.endswith(".jpg"):
+                    image_path = os.path.join(data_dir, label, img_file)
+                    if annot_data_dir:
+                        mask_file = img_file.replace(".jpg", ".png")
+                        if not os.path.exists(mask_path:=os.path.join(annot_data_dir, label, mask_file)):
+                            raise FileNotFoundError(f"Mask file not found for image {image_path}. Expected path: {mask_path}")
 
-        return images
+                    self.images.append(image_path)
+                    self.masks.append(mask_path)
+                    self.labels.append(label)
 
     def _plot_image(self, images_and_labels: list[tuple[np.ndarray, int]]) -> None:
         """
@@ -162,67 +151,42 @@ class BaseDataset(Dataset):
 
         plt.show()
 
-    def __getitem__(self, indices: int | slice) -> list[tuple[np.ndarray, int]]:
+    def __getitem__(self, index: int | slice) -> tuple[np.ndarray, int] | tuple[np.ndarray, np.ndarray, int]:
         """
-        Get the data at the specified index range. If `plot` is set to True, `plot_image` is called.
-
-        :param indices: Index or slice of the image to retrieve
-        :type index: int | slice
-
-        :return: A list containing tuples, each with an image, (mask) and label
-        :rtype: list[tuple(np.ndarray, int)]
-
-        :raises IndexError: If the index is out of range
-        """
-        if isinstance(indices, slice):
-            data = [self.__get_single_item(index) for index in range(*indices.indices(len(self.images)))]
-        else:
-            data = [self.__get_single_item(indices)]
-
-        if len(data) == 0:
-            raise IndexError(f"Index out of range. Data for {self._purpose} purpose only contains {len(self.images)} images.")
-
-        if self.plot:
-            if len(data) > self._max_img_to_plot:
-                self._logger.warning("Too many images to plot. Plotting only the first %s images",
-                                     self._max_img_to_plot)
-                self._plot_image(data[:self._max_img_to_plot])
-            else:
-                self._plot_image(data)
-
-        return data
-
-    def __len__(self) -> int:
-        return len(self.images)
-
-    def __get_single_item(self, index: int) -> tuple[np.ndarray, int] | tuple[np.ndarray, np.ndarray, int]:
-        """
-        Gets a single image and label (and mask, if path is specified) at the specified index. If
-        `plot` is set to True, `plot_image` is called.
+        Get the image, mask, and label at the specified index. If `plot` is set to True, `plot_image` is called.
 
         :param index: Index of the image to retrieve
-        :type index: int
 
-        :return: Image and label (+ mask)
-        :rtype: tuple[np.ndarray, int] | tuple[np.ndarray, np.ndarray, int]
+        :return: Image, mask (if available), and label at the specified index based on `return_type`
+
+        :raises IndexError: If the index is out of range
+        :raises ValueError: If `return_type` is invalid
         """
-        image_path = self.images[index]['image_path']
+        self._logger.debug(f"Retrieving item at index: {index} with return type: {self.return_type}")
 
-        label = self.images[index]['label']
-        self._logger.debug("Got label %s for image %s", label, image_path)
+        if isinstance(index, slice):
+            start, stop, step = index.indices(len(self.images))
+            if stop > len(self.images) or start < 0:
+                raise IndexError(
+                    f"Index out of range. Data for {self.purpose} purpose only contains {len(self.images)} images.")
+        elif index >= len(self.images) or index < 0:
+            raise IndexError(
+                f"Index out of range. Data for {self.purpose} purpose only contains {len(self.images)} images.")
+
+        image_path = self.images[index]
+        label = self.labels[index]
+        mask_path = self.masks[index] if self.masks[index] else None
 
         self._logger.info("Retrieving image %s with label %s", image_path, label)
-
         image = cv2.imread(image_path)
+
+        if image is None:
+            raise FileNotFoundError(f"Image file {image_path} could not be loaded.")
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
-        if self.transform:
-            image = self.transform(image)
-
-        # Load mask if provided
-        if self.mask_annots:
+        mask = None
+        if mask_path:
             self._logger.info("Masks are detected for dataset %s", self.__class__.__name__)
-            mask_path = self.mask_annots[index]['mask_path']
             mask = cv2.imread(mask_path, cv2.IMREAD_COLOR)
             if mask is None:
                 raise FileNotFoundError(f"""
@@ -231,11 +195,36 @@ class BaseDataset(Dataset):
                 Make sure you name the mask images the same as the image name.
                 """)
 
-            if self.transform:
-                mask = self.transform(mask)
-            return image, mask, label
+        transform_keys = {'image': image, 'mask': mask} if mask_path else {'image': image}
 
-        return image, label
+        if self.transform:
+            transformed = self.transform(**transform_keys)
+            image, mask = transformed['image'], transformed['mask']
+
+        match self.return_type:
+            case 'image':
+                data = image, label
+            case 'image+mask':
+                data = image, mask
+                self._logger.debug("Image shape and dtype: %s, %s", image.shape, image.dtype)
+                self._logger.debug("Image: %s", image)
+                self._logger.debug("Mask shape and dtype: %s, %s", mask.shape, mask.dtype)
+                self._logger.debug("Mask: %s", mask)
+                self._logger.debug("Unique values in mask: %s", np.unique(mask))
+            case 'image+label':
+                data = image, label
+            case 'all':
+                data = image, mask, label
+            case _:
+                raise ValueError(f"`return_type` has to be whether 'image', 'image+mask', 'image+label' or 'all'. not {self.return_type}")
+
+        if self.plot:
+            self._plot_image(data)
+
+        return data
+
+    def __len__(self) -> int:
+        return len(self.images)
 
 class Excavators(Enum):
     BACKGROUND = 0
@@ -261,10 +250,11 @@ class ExcavatorDataset(BaseDataset):
                  train_mask_data_dir: str = TRAIN_MASK_DATA_PATH_EXCAVATOR,
                  test_img_data_dir: str = TEST_IMG_DATA_PATH_EXCAVATOR,
                  test_mask_data_dir: str = TEST_MASK_DATA_PATH_EXCAVATOR,
-                 transform: transforms = None,
+                 transform: A.Compose = None,
                  plot: bool = False,
                  verbose: bool = False,
                  purpose: str = 'train',
+                 return_type: str = 'image+mask',
                  class_colors: dict = None):
         super().__init__(train_img_data_dir=train_img_data_dir,
                          train_mask_data_dir=train_mask_data_dir,
@@ -274,6 +264,7 @@ class ExcavatorDataset(BaseDataset):
                          plot=plot,
                          verbose=verbose,
                          purpose=purpose,
+                            return_type=return_type,
                          class_colors=class_colors)
         self._class_colors = {
             Excavators.BACKGROUND: torch.from_numpy(np.array([0, 0, 0])),
@@ -316,13 +307,16 @@ class ExcavatorDataset(BaseDataset):
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
-    transformer = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Resize((224, 224)),
+    transformer = A.Compose([
+        A.Resize(640, 640),
+        ToTensorV2()
     ])
-    excavator_data = ExcavatorDataset(transform=transformer)
-    img, mask, lbl = excavator_data[0][0]
+    excavator_data = ExcavatorDataset(transform=transformer, plot=False)
+    img, mask = excavator_data[0]
     print("Shape of image:", img.shape)
+    plt.imshow(mask)
     print("Shape of mask:", mask.shape)
-    cls_mask = excavator_data.rgb_to_mask(mask)
-    print("Unique values in mask:", torch.unique(cls_mask))
+    # cls_mask = excavator_data.rgb_to_mask(mask.permute(2, 0, 1))
+    # print("Unique values in mask:", torch.unique(cls_mask))
+
+    plt.show()

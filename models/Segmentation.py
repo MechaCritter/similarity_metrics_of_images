@@ -2,9 +2,6 @@ import logging
 from enum import Enum
 
 import torch
-import torch.nn.functional as F
-from torch.fft import ifftshift
-from torchvision import transforms
 from segmentation_models_pytorch import Unet, DeepLabV3
 from segmentation_models_pytorch.utils.train import TrainEpoch, ValidEpoch
 from segmentation_models_pytorch.utils.losses import DiceLoss
@@ -47,7 +44,7 @@ class UNet:
         self.lr = lr
 
         if model_path:
-            self.model = torch.jit.load(model_path)
+            self.model = torch.load(model_path)
             self._logger.info(f"Model loaded from {model_path} with parameters: {self.model}")
         else:
             self.model = Unet(encoder_name=encoder_name,
@@ -122,6 +119,7 @@ class UNet:
         gt_mask = gt_mask.to(self.device).unsqueeze(0)
         with torch.no_grad():
             # Output: Probabilities of each class: torch.tensor([1, num_classes, H, W])
+            self._logger.debug("Image type: %s", image.dtype)
             output = self.model(image)
             self._logger.debug("background proba: %s", background_proba:=output[0, 0, :, :].cpu().numpy())
             self._logger.debug("Min proba: %s", min_bk:=background_proba.min())
@@ -164,18 +162,21 @@ if __name__ =="__main__":
     import cv2
     import numpy as np
     from torch.utils.data import DataLoader
+    import albumentations as A
+    from albumentations.pytorch import ToTensorV2
 
     unet = UNet(model_path='models/torch_model_files/UNet.pt')
 
-    transformer = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Resize((640, 640)),
-    ])
-    dataset = ExcavatorDataset(transform=transformer, purpose = 'test')
+    transformer = A.Compose([
+        A.Resize(640, 640),
+        ToTensorV2()
+    ], additional_targets={'mask': 'mask'})
+    dataset = ExcavatorDataset(transform=transformer, purpose ='test')
     dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
-    # conf_excavator = []
-    # for i in range(100,140):
+    conf_excavator = []
+    # for i in range(100,101):
     #     img, mask, lbl = dataset[i][0]
+    #
     #     print("Shape of image:", img.shape)
     #     mask = dataset.rgb_to_mask(mask)
     #     print("Shape of mask:", mask.shape)
@@ -185,5 +186,5 @@ if __name__ =="__main__":
     #     conf_excavator.append(confidence)
     #     print("Shape of predicted mask:", pred_mask.shape)
     # print("Confidence of excavator:", conf_excavator)
-    eval_logs= unet._valid_epoch.run(dataloader)
-    print("Evaluation logs:", eval_logs)
+    unet._valid_epoch.run(dataloader)
+
