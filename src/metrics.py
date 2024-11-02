@@ -2,14 +2,15 @@ from dataclasses import dataclass, field
 import logging
 
 import torch
+from sklearn.cluster import KMeans
+from sklearn.mixture import GaussianMixture
 from skimage.feature import fisher_vector
 import numpy as np
 import cv2
 from typing import List
 from piq import ssim, multi_scale_ssim as ms_ssim
 
-from models.Clustering import GlobalKMeans, GlobalGMM
-from src.utils import sift, root_sift
+from src.utils import sift, root_sift, load_model
 from src.config import setup_logging
 
 setup_logging()
@@ -95,12 +96,12 @@ class VLAD(ClusteringBasedMetric):
     To retrieve to VLAD vector, simply call the `vector` attribute of the object.
 
     :param k_means: The pre-trained k-means model to use for clustering the descriptors.
-    :type k_means: GlobalKMeans
+    :type k_means: KMeans
 
     :ivar _vector: The VLAD vector for the image. Dimension would be (num_clusters, 128) if flatten is False, else (num_clusters * 128,).
     :vartype vector: np.ndarray
     """
-    k_means: GlobalKMeans = None
+    k_means: KMeans = None
     _vector: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -133,8 +134,8 @@ class VLAD(ClusteringBasedMetric):
         return self._vector
 
     def centroids_and_labels(self):
-        self.descriptor_labels = self.k_means.predict(self.descriptors)
-        self.descriptor_centroids = self.k_means.get_centroids()
+        self.descriptor_labels = self.k_means.predict(self.descriptors.astype(np.float32))
+        self.descriptor_centroids = self.k_means.cluster_centers_
 
     def compute_vlad_vector(self) -> None:
         """
@@ -142,7 +143,7 @@ class VLAD(ClusteringBasedMetric):
         128, as calculated using OpenCV's SIFT_create() function. After calculaing the VLAD
         vector, normalization is applied to the vector.
         """
-        vlad = np.zeros((len(self.k_means.get_centroids()), 128))
+        vlad = np.zeros((len(self.k_means.cluster_centers_), 128))
 
         for i in range(len(self.descriptors)):
             label = self.descriptor_labels[i]
@@ -175,9 +176,6 @@ class FisherVector(ClusteringBasedMetric):
     
     To retrieve the Fischer Vector, simply call the `vector` attribute of the object.
 
-    :param num_gaussians: The number of Gaussian components to use in the Gaussian Mixture Model (GMM). Default is 128.
-    :type num_gaussians: int
-    
     **Attributes**:
 
     :ivar _vector: The Fischer Vector for the image. Dimension would be (num_clusters, 128) if flatten is False, else (num_clusters * 128,).
@@ -185,7 +183,7 @@ class FisherVector(ClusteringBasedMetric):
     :ivar gmm: The Gaussian Mixture Model used to calculate the Fischer Vector.
     :vartype gmm: GaussianMixture
     """
-    gmm: GlobalGMM = None
+    gmm: GaussianMixture = None
     _vector: np.ndarray = field(init=False)
 
     def __post_init__(self):
@@ -217,8 +215,8 @@ class FisherVector(ClusteringBasedMetric):
         return self._vector
 
     def centroids_and_labels(self):
-        self.descriptor_labels = self.gmm.predict(self.descriptors)
-        self.descriptor_centroids = self.gmm.get_centroids()
+        self.descriptor_labels = self.gmm.predict(self.descriptors.astype(np.float32))
+        self.descriptor_centroids = self.gmm.means_
 
     def compute_fisher_vector(self) -> None:
         """
@@ -226,7 +224,7 @@ class FisherVector(ClusteringBasedMetric):
         Fisher Vector algorithm from the scikit-image library.
         """
         # Extract the Fisher Vector
-        self._vector = np.array([fisher_vector(self.descriptors, self.gmm.gmm, alpha=self.power_norm_weight)])
+        self._vector = np.array([fisher_vector(self.descriptors, self.gmm, alpha=self.power_norm_weight)])
 
         _logger_fv.debug("Fisher vector before normalization: %s", self._vector)
 
@@ -292,21 +290,19 @@ class MS_SSIM(StructuralSimilarity):
 
 
 if __name__ == "__main__":
-    from src.datasets import CustomDataSet
-    flower_data = CustomDataSet(plot=True)
+    from src.datasets import BaseDataset
+    flower_data = BaseDataset(plot=True)
     image = flower_data[0]
-    k_means = GlobalKMeans()
-    gmm = GlobalGMM()
-    k_means.load_model("models/pickle_model_files/k_means_model_flower_car_500imgs.pkl")
-    gmm.load_model("models/pickle_model_files/gmm_model_flower_car_500imgs.pkl")
+    k_means = load_model("models/pickle_model_files/k_means_model_flower_car_500imgs.pkl")
+    gmm = load_model("models/pickle_model_files/gmm_model_flower_car_500imgs.pkl")
     for img in image:
-        vlad = VLAD(image=img[0], k_means=k_means, flatten=True)
-        print("Vlad vector:", vlad.vector)
-        print("Length of VLAD vector:", len(vlad.vector))
-        vlad_rootsift = VLAD(image=img[0], k_means=k_means, feature="root_sift", flatten=True)
-        fisher_sift = FisherVector(image=img[0], gmm=gmm, flatten=True)
-        print("Vlad RootSIFT vector:", vlad_rootsift.vector)
-        print("Length of VLAD RootSIFT vector:", len(vlad_rootsift.vector))
-        print("Similarity between VLAD and VLAD RootSIFT:", np.dot(vlad.vector, vlad_rootsift.vector.T))
+        vlad = VLAD(image=img[0], k_means=k_means, flatten=True).vector
+        print("Vlad vector:", vlad)
+        print("Length of VLAD vector:", len(vlad))
+        vlad_rootsift = VLAD(image=img[0], k_means=k_means, feature="root_sift", flatten=True).vector
+        fisher_sift = FisherVector(image=img[0], gmm=gmm, flatten=True).vector
+        print("Vlad RootSIFT vector:", vlad_rootsift)
+        print("Length of VLAD RootSIFT vector:", len(vlad_rootsift))
+        print("Similarity between VLAD and VLAD RootSIFT:", np.dot(vlad, vlad_rootsift.T))
 
     

@@ -1,5 +1,6 @@
 import logging
 
+import joblib
 import numpy as np
 import cv2
 from sklearn.cluster import KMeans
@@ -23,6 +24,7 @@ def _check_is_numpy_image(func: callable):
 
     return wrapper
 
+
 def get_centroids(data: np.ndarray, num_clusters: int):
     """
     Get the centroids of the clusters using KMeans. `data`should best be a numpy array.
@@ -39,6 +41,7 @@ def get_centroids(data: np.ndarray, num_clusters: int):
     kmeans.fit(data)
 
     return kmeans.cluster_centers_, kmeans.labels_
+
 
 def create_and_plot_synthetic_data(lower_limit: float, upper_limit: float, num_samples: int,
                                    plot_type: str = 'scatter'):
@@ -75,6 +78,7 @@ def create_and_plot_synthetic_data(lower_limit: float, upper_limit: float, num_s
 
     return x, y
 
+
 @_check_is_numpy_image
 def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     """
@@ -87,6 +91,7 @@ def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     :rtype: tuple
     """
     return tuple(np.argwhere(np.any(image != 0, axis=-1)))
+
 
 @_check_is_numpy_image
 def plot_clusters_on_image(image: np.ndarray,
@@ -205,6 +210,7 @@ def plot_similarity_heatmap_between_2_vectors(vector1: np.ndarray, vector2: np.n
     plt.ylabel("Clusters of Image 2") if "ylabel" not in kwargs else plt.ylabel(kwargs["ylabel"])
     plt.show()
 
+
 def is_subset(list1: list, list2: list) -> bool:
     """
     Check if list1 is a subset of list2.
@@ -229,6 +235,7 @@ def convert_to_integers(list_of_tuples: list[tuple[float, float]]) -> list[tuple
     """
     return [(int(x), int(y)) for x, y in list_of_tuples]
 
+
 def standardize_data(data: np.ndarray, axis: int) -> np.ndarray:
     """
     Standardize the given data using the formula: (x - mean) / std.
@@ -240,11 +247,36 @@ def standardize_data(data: np.ndarray, axis: int) -> np.ndarray:
     """
     return (data - np.mean(data, axis=axis)) / np.std(data, axis=0)
 
+
+def save_model(model, file_path: str) -> None:
+    """
+    Save the trained model to a file.
+
+    :param model: Model to save
+    :param file_path: Path to save the trained model
+    """
+    with open(file_path, 'wb') as file:
+        joblib.dump(model, file)
+
+
+def load_model(file_path: str) -> object:
+    """
+    Load a pre-trained model from a file.
+
+    :param file_path: Path from which to load the trained model
+
+    :return: Trained model
+    """
+    with open(file_path, 'rb') as file:
+        return joblib.load(file)
+
+
 @_check_is_numpy_image
 def gaussian_blurr(image, kernel_size=3, sigma=1.0):
     _logger_ip.debug(f"This Gaussian kernel was used: \n"
-                        f"{cv2.getGaussianKernel(kernel_size, sigma) @ cv2.getGaussianKernel(kernel_size, sigma).T}")
+                     f"{cv2.getGaussianKernel(kernel_size, sigma) @ cv2.getGaussianKernel(kernel_size, sigma).T}")
     return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
+
 
 @_check_is_numpy_image
 def thresholding(image, threshold_value=None, max_value=255, threshold_types: tuple = (cv2.THRESH_BINARY,)):
@@ -255,6 +287,7 @@ def thresholding(image, threshold_value=None, max_value=255, threshold_types: tu
     ret, thresholded_image = cv2.threshold(gray_image, threshold_value, max_value, np.sum(threshold_types))
     _logger_ip.debug(f"Threshold value used: {threshold_value}")
     return thresholded_image
+
 
 @_check_is_numpy_image
 def resize(image, dimensions, interpolation=cv2.INTER_LINEAR):
@@ -267,12 +300,14 @@ def resize(image, dimensions, interpolation=cv2.INTER_LINEAR):
         dimensions = (dimensions, dimensions)
     return cv2.resize(image, dimensions, interpolation=interpolation)
 
+
 @_check_is_numpy_image
 def sharpen(image, kernel=np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])):
     """
     Sharpens the given image using the given kernel.
     """
     return cv2.filter2D(image, -1, kernel)
+
 
 @_check_is_numpy_image
 def sift(image) -> [cv2.KeyPoint, np.ndarray]:
@@ -290,9 +325,10 @@ def sift(image) -> [cv2.KeyPoint, np.ndarray]:
     keypoints, descriptors = sift.detectAndCompute(image, None)
     return keypoints, descriptors
 
+
 @_check_is_numpy_image
 def root_sift(image: np.ndarray,
-              epsilon: float=1e-7) -> tuple[cv2.KeyPoint, np.ndarray]:
+              epsilon: float = 1e-7) -> tuple[cv2.KeyPoint, np.ndarray]:
     """
     Extracts RootSIFT features from the given image. The only difference to SIFT is that
     L1 normalization and square root are applied to the descriptors before any further processing.
@@ -306,6 +342,7 @@ def root_sift(image: np.ndarray,
     descriptors = np.sqrt(descriptors)
     return keypoints, descriptors
 
+
 @_check_is_numpy_image
 def surf(image: np.ndarray) -> tuple[cv2.KeyPoint, np.ndarray]:
     """
@@ -315,12 +352,13 @@ def surf(image: np.ndarray) -> tuple[cv2.KeyPoint, np.ndarray]:
     keypoints, descriptors = surf.detectAndCompute(image, None)
     return keypoints, descriptors
 
+
 @_check_is_numpy_image
 def difference_of_gaussian(image: np.ndarray,
-                            num_intervals: int,
-                            num_octaves: int = 1,
-                            sigma: float = 1.6,
-                            plot: bool = False) -> list:
+                           num_intervals: int,
+                           num_octaves: int = 1,
+                           sigma: float = 1.6,
+                           plot: bool = False) -> list:
     """
     Calculates DoG for the given image.
 
@@ -381,11 +419,11 @@ def difference_of_gaussian(image: np.ndarray,
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
-    from datasets import CustomDataSet
+    from datasets import BaseDataset
 
-    flower_data = CustomDataSet('data/raw/train')
+    flower_data = BaseDataset('data/raw/train')
     image = flower_data[20][0]
     octave_images = difference_of_gaussian(image,
-                                            num_intervals=5,
-                                            num_octaves=2,
-                                            plot=True)
+                                           num_intervals=5,
+                                           num_octaves=2,
+                                           plot=True)

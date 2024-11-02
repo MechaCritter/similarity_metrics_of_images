@@ -1,14 +1,13 @@
 import logging
 import logging.config
 import yaml
-import os
-import sys
 
-# Insert path to root 
-sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+TRAIN_IMG_DATA_PATH_EXCAVATOR= r"D:\bachelor_thesis\excavator_dataset_w_masks2\train_sorted"
+TRAIN_MASK_DATA_PATH_EXCAVATOR = r"D:\bachelor_thesis\excavator_dataset_w_masks2\train_annot_sorted"
+TEST_IMG_DATA_PATH_EXCAVATOR= r"D:\bachelor_thesis\excavator_dataset_w_masks2\test_sorted"
+TEST_MASK_DATA_PATH_EXCAVATOR = r"D:\bachelor_thesis\excavator_dataset_w_masks2\test_annot_sorted"
 
-
-def setup_logging(default_path='res/logging_config.yaml', default_level=logging.INFO):
+def setup_logging(default_path=r"C:\Users\vunha\Documents\Uni_Infos\Bachelorarbeit\workspace\similarity_metrics_of_images\res\logging_config.yaml", default_level=logging.INFO):
     """Setup logging configuration"""
     try:
         with open(default_path, 'rt') as f:
