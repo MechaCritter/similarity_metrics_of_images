@@ -167,12 +167,12 @@ def main():
             train_and_save_gmm_model(data_set,
                                      num_cluster,
                                      feature=feature,
-                                     test=False,
+                                     test=True,
                                      model_path=f'models/pickle_model_files/gmm_model_k{num_cluster}_{feature}.pkl')
             train_and_save_k_means_model(data_set,
                                          num_cluster,
                                          feature=feature,
-                                         test=False,
+                                         test=True,
                                          model_path=f'models/pickle_model_files/k_means_model_k{num_cluster}_{feature}.pkl')
 
 if __name__ == '__main__':
