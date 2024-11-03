@@ -4,6 +4,7 @@
     <content url="file://$MODULE_DIR$">
       <excludeFolder url="file://$MODULE_DIR$/.venv" />
       <excludeFolder url="file://$MODULE_DIR$/logs" />
+      <excludeFolder url="file://$MODULE_DIR$/notebooks" />
       <excludePattern pattern=".venv" />
     </content>
     <orderEntry type="jdk" jdkName="conda_env" jdkType="Python SDK" />

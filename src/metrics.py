@@ -22,6 +22,8 @@ _logger_fv = logging.getLogger("Fisher_Vector")
 @dataclass
 class ClusteringBasedMetric:
     """
+    TODO: if root_sift is used as feature, high similarity is yielded no matter the images. Investigate why.
+    TODO: remind user to specify 'sift' or 'root_sift' as feature when using VLAD or Fisher Vector based on the clustering model loaded.
     Base class for clustering-based metrics (metrics that use k-means or GMM). Used for VLAD and Fischer Vector calculations.
 
     - **Note**: All the attributes are read-only. They are calculated internally and should not be modified.
@@ -290,19 +292,33 @@ class MS_SSIM(StructuralSimilarity):
 
 
 if __name__ == "__main__":
-    from src.datasets import BaseDataset
-    flower_data = BaseDataset(plot=True)
-    image = flower_data[0]
-    k_means = load_model("models/pickle_model_files/k_means_model_flower_car_500imgs.pkl")
-    gmm = load_model("models/pickle_model_files/gmm_model_flower_car_500imgs.pkl")
-    for img in image:
-        vlad = VLAD(image=img[0], k_means=k_means, flatten=True).vector
-        print("Vlad vector:", vlad)
-        print("Length of VLAD vector:", len(vlad))
-        vlad_rootsift = VLAD(image=img[0], k_means=k_means, feature="root_sift", flatten=True).vector
-        fisher_sift = FisherVector(image=img[0], gmm=gmm, flatten=True).vector
-        print("Vlad RootSIFT vector:", vlad_rootsift)
-        print("Length of VLAD RootSIFT vector:", len(vlad_rootsift))
-        print("Similarity between VLAD and VLAD RootSIFT:", np.dot(vlad, vlad_rootsift.T))
+    from sklearn.metrics.pairwise import cosine_similarity
+    from src.datasets import *
+    data = ExcavatorDataset(plot=True)
+    image1, *_ = data[0]
+    image2, *_ = data[3]
+    k_means = load_model("models/pickle_model_files/k_means_model_k128_sift.pkl")
+    gmm = load_model("models/pickle_model_files/gmm_model_k128_sift.pkl")
+    pca_model = load_model("models/pickle_model_files/pca_model.pkl")
 
-    
+    vlad1 = VLAD(image=image1,
+                 k_means=k_means,
+                 feature="sift",
+                 flatten=True).vector
+    vlad2 = VLAD(image=image2,
+                 k_means=k_means,
+                feature="sift",
+                 flatten=True).vector
+    print("VLAD similarity between first two images:", cosine_similarity(vlad1.reshape(1, -1), vlad2.reshape(1, -1)))
+    fisher1 = FisherVector(image=image1,
+                           gmm=gmm,
+                           feature="sift",
+                           flatten=True).vector
+    fisher2 = FisherVector(image=image2,
+                           gmm=gmm,
+                            feature="sift",
+                           flatten=True).vector
+    print("Fisher Vector similarity between first two images:", cosine_similarity(fisher1.reshape(1, -1), fisher2.reshape(1, -1)))
+
+
+

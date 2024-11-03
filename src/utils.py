@@ -1,11 +1,15 @@
 import logging
+from enum import Enum
 
 import joblib
 import numpy as np
+import torch
 import cv2
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
 import seaborn as sns
+import torch.nn.functional as F
+from segmentation_models_pytorch.utils.metrics import IoU
 
 from src.config import setup_logging
 
@@ -16,10 +20,10 @@ _logger_ip = logging.getLogger("Image_Processor")
 
 
 # Decorators
-def _check_is_numpy_image(func: callable):
+def check_is_numpy_image(func: callable):
     def wrapper(image, *args, **kwargs):
         if not isinstance(image, np.ndarray):
-            raise ValueError("Input image should be a numpy array")
+            raise ValueError(f"Input image should be a numpy array, not {type(image)}")
         return func(image, *args, **kwargs)
 
     return wrapper
@@ -79,7 +83,121 @@ def create_and_plot_synthetic_data(lower_limit: float, upper_limit: float, num_s
     return x, y
 
 
-@_check_is_numpy_image
+def rgb_to_mask(rgb_mask: torch.Tensor, class_colors: dict[int, torch.Tensor]) -> torch.Tensor:
+    """
+    Converts RGB mask image to class index mask image.
+    **Note**: broadcast the mask to shape (3xHxW) before passing it to this method.
+
+    :param rgb_mask: RGB mask image tensor with shape (3, H, W)
+    :param class_colors: Dictionary containing class enum objects as key and normalized RGB color as value
+
+    :return: Class index mask image with shape (H, W)
+    """
+    if not rgb_mask.shape[0] == 3:
+        raise ValueError(
+            f"RGB mask image has to have shape (3, H, W). Got shape: {rgb_mask.shape} Use `torch.permute` to change the shape.")
+
+    mask = torch.zeros((rgb_mask.shape[-2], rgb_mask.shape[-1]), dtype=torch.float32)
+    for cls, color in class_colors.items():
+        mask[torch.all(rgb_mask == color.view(3, 1, 1), axis=0)] = cls.value if isinstance(cls, Enum) else cls
+    return mask.to(torch.int64)
+
+
+def mask_to_rgb(class_mask: torch.Tensor , class_colors: dict[int, torch.Tensor]) -> torch.Tensor:
+    """
+    Converts class index mask image to RGB mask image.
+
+    :param class_mask: Class index mask image tensor with shape (H, W)
+
+    :return: RGB mask image tensor with shape (3, H, W)
+    """
+    if len(class_mask.shape) != 2:
+        raise ValueError(f"Class mask image has to have shape (H, W). Got shape: {class_mask.shape}")
+
+    rgb_mask = torch.zeros((3, class_mask.shape[0], class_mask.shape[1]), dtype=torch.float32)
+    for cls, color in class_colors.items():
+        rgb_mask[:, class_mask == (cls.value if isinstance(cls, Enum) else cls)] = color.view(3, 1)
+    return rgb_mask
+
+
+def multi_class_dice_score(pred_mask: torch.Tensor,
+                           true_mask: torch.Tensor,
+                           num_classes: int,
+                           ignore_channels: list[int] = None) -> torch.Tensor:
+    """
+    Compute Dice Similarity Coefficient for the predicted mask and the true mask.
+
+    :param pred_mask: predicted mask with shape (H, W)
+    :param true_mask: true mask with shape (H, W)
+    :param num_classes: number of classes
+    :param ignore_channels: list of classes to ignore while calculating the Dice score (pass 0 to ignore the background class)
+
+    :return: Dice score
+
+    :raises ValueError: If the shape of the predicted mask and the true mask is not the same
+    :raises ValueError: If the predicted mask and the true mask are not 2D tensors
+    """
+    if not pred_mask.shape == true_mask.shape:
+        raise ValueError("The shape of the predicted mask and the true mask should be the same.")
+    if not len(pred_mask.shape) == 2 or not len(true_mask.shape) == 2:
+        raise ValueError(
+            f"The predicted mask and the true mask should be 2D tensors, got {pred_mask.shape} for prediction and {true_mask.shape} for ground truth.")
+
+    # Convert pred and true masks to one-hot encoded format
+    pred_mask_one_hot = F.one_hot(pred_mask, num_classes=num_classes).permute(2, 0, 1).float()
+    true_mask_one_hot = F.one_hot(true_mask, num_classes=num_classes).permute(2, 0, 1).float()
+    # Initialize a list to store Dice scores for each class
+    dice_scores = []
+
+    # Calculate Dice score for each class, ignoring the specified ignore_channels
+    for class_index in range(num_classes):
+        if ignore_channels:
+            if class_index in ignore_channels:
+                print("Ignoring channel:", class_index)
+                continue
+
+        # Get the predicted and true masks for the current class
+        pred_class, true_class = pred_mask_one_hot[class_index], true_mask_one_hot[class_index]
+
+        # Calculate intersection and union
+        intersection = torch.sum(pred_class * true_class)
+        pred_sum, true_sum = torch.sum(pred_class), torch.sum(true_class)
+
+        # Compute Dice coefficient for this class
+        dice_score = (2.0 * intersection) / (pred_sum + true_sum + 1e-8)  # Small epsilon to avoid division by zero
+        dice_scores.append(dice_score)
+
+    return torch.mean(torch.tensor(dice_scores))
+
+
+def multiclass_iou(pred_mask: torch.Tensor,
+                   true_mask: torch.Tensor,
+                   num_classes: int,
+                   ignore_channels: list = None) -> torch.Tensor:
+    """
+    Compute Intersection over Union (IoU) for the predicted mask and the true mask.
+
+    :param pred_mask: predicted mask with shape (H, W)
+    :param true_mask: true mask with shape (H, W)
+    :param num_classes: number of classes
+    :param ignore_channels: list of channels to ignore (pass 0 to ignore background)
+
+    :return: IoU score
+
+    :raises ValueError: If the shape of the predicted mask and the true mask is not the same
+    :raises ValueError: If the predicted mask and the true mask are not 2D tensors
+    """
+    if not pred_mask.shape == true_mask.shape:
+        raise ValueError("The shape of the predicted mask and the true mask should be the same.")
+    if not len(pred_mask.shape) == 2 or not len(true_mask.shape) == 2:
+        raise ValueError(f"The predicted mask and the true mask should be 2D tensors, got {pred_mask.shape} for prediction and {true_mask.shape} for ground truth.")
+
+    pred_mask_one_hot = F.one_hot(pred_mask, num_classes=num_classes).permute(2, 0, 1).unsqueeze(0).float()
+    true_mask_one_hot = F.one_hot(true_mask, num_classes=num_classes).permute(2, 0, 1).unsqueeze(0).float()
+
+    return IoU(eps=1e-6, threshold=None, ignore_channels=ignore_channels)(pred_mask_one_hot, true_mask_one_hot)
+
+@check_is_numpy_image
 def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     """
     Get the indices of pixels that have at least one non-zero channel.
@@ -93,7 +211,7 @@ def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     return tuple(np.argwhere(np.any(image != 0, axis=-1)))
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def plot_clusters_on_image(image: np.ndarray,
                            data: np.ndarray,
                            labels: np.ndarray,
@@ -271,14 +389,14 @@ def load_model(file_path: str) -> object:
         return joblib.load(file)
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def gaussian_blurr(image, kernel_size=3, sigma=1.0):
     _logger_ip.debug(f"This Gaussian kernel was used: \n"
                      f"{cv2.getGaussianKernel(kernel_size, sigma) @ cv2.getGaussianKernel(kernel_size, sigma).T}")
     return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def thresholding(image, threshold_value=None, max_value=255, threshold_types: tuple = (cv2.THRESH_BINARY,)):
     """
     Currently only works for gray images.
@@ -289,7 +407,7 @@ def thresholding(image, threshold_value=None, max_value=255, threshold_types: tu
     return thresholded_image
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def resize(image, dimensions, interpolation=cv2.INTER_LINEAR):
     """
     Resizes the given image to the given dimensions. If a single integer is passed,
@@ -301,7 +419,7 @@ def resize(image, dimensions, interpolation=cv2.INTER_LINEAR):
     return cv2.resize(image, dimensions, interpolation=interpolation)
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def sharpen(image, kernel=np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])):
     """
     Sharpens the given image using the given kernel.
@@ -309,7 +427,7 @@ def sharpen(image, kernel=np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])):
     return cv2.filter2D(image, -1, kernel)
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def sift(image) -> [cv2.KeyPoint, np.ndarray]:
     """
     Extracts SIFT features from the given image.
@@ -321,12 +439,11 @@ def sift(image) -> [cv2.KeyPoint, np.ndarray]:
     :rtype: tuple
     """
     sift = cv2.SIFT.create()
-    _logger_ife.debug(f"SIFT object created: {sift}")
     keypoints, descriptors = sift.detectAndCompute(image, None)
     return keypoints, descriptors
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def root_sift(image: np.ndarray,
               epsilon: float = 1e-7) -> tuple[cv2.KeyPoint, np.ndarray]:
     """
@@ -343,7 +460,7 @@ def root_sift(image: np.ndarray,
     return keypoints, descriptors
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def surf(image: np.ndarray) -> tuple[cv2.KeyPoint, np.ndarray]:
     """
     Extracts SURF features from the given image.
@@ -353,7 +470,7 @@ def surf(image: np.ndarray) -> tuple[cv2.KeyPoint, np.ndarray]:
     return keypoints, descriptors
 
 
-@_check_is_numpy_image
+@check_is_numpy_image
 def difference_of_gaussian(image: np.ndarray,
                            num_intervals: int,
                            num_octaves: int = 1,

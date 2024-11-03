@@ -6,11 +6,11 @@ import cv2
 import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-import albumentations as A
-from albumentations.pytorch import ToTensorV2
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 
 from src.config import *
+from src.utils import rgb_to_mask, mask_to_rgb
 
 setup_logging()
 load_dotenv()
@@ -18,10 +18,9 @@ load_dotenv()
 
 class BaseDataset(Dataset):
     """
-    Allows for quick access dataset images, simply provide the link to folder containing train and test images.
+    **Note**: this dataset does not support slice-wise indexing. To load multiple images, use a `dataloader` instead.
     """
     purpose: str
-
     def __init__(self,
                  train_img_data_dir: str = TRAIN_IMG_DATA_PATH_EXCAVATOR,
                  validation_img_data_dir: Optional[str] = None,
@@ -29,7 +28,7 @@ class BaseDataset(Dataset):
                  train_mask_data_dir: Optional[str] = None,
                  validation_mask_data_dir: Optional[str] = None,
                  test_mask_data_dir: Optional[str] = None,
-                 transform: A.Compose = None,
+                 transform: transforms = None,
                  plot: bool = False,
                  verbose: bool = False,
                  purpose: str = 'train',
@@ -60,7 +59,7 @@ class BaseDataset(Dataset):
         self.plot: bool = plot
         self.return_type: str = return_type
         self.purpose: str = purpose
-        self._class_colors = class_colors
+        self._class_colors: str = class_colors
 
         self._logger.debug(f"Initializing BaseDataset with purpose: {self.purpose}")
         self._logger.debug(f"Train image data directory: {train_img_data_dir}")
@@ -84,7 +83,7 @@ class BaseDataset(Dataset):
         self.masks = []
         self.labels = []
 
-        self.transform: A.Compose = transform
+        self.transform: transforms = transform
 
         # Method calls
         self.load_images()
@@ -130,25 +129,21 @@ class BaseDataset(Dataset):
                         mask_file = img_file.replace(".jpg", ".png")
                         if not os.path.exists(mask_path:=os.path.join(annot_data_dir, label, mask_file)):
                             raise FileNotFoundError(f"Mask file not found for image {image_path}. Expected path: {mask_path}")
+                self.masks.append(mask_path)
+                self.images.append(image_path)
+                self.labels.append(label)
 
-                    self.images.append(image_path)
-                    self.masks.append(mask_path)
-                    self.labels.append(label)
-
-    def _plot_image(self, images_and_labels: list[tuple[np.ndarray, int]]) -> None:
+    def _plot_image(self, data: tuple) -> None:
         """
         Plot the image with its file path and label. Only call from inside.
         If image shape of (3, width, height) is passed, it is converted to (width, height, 3) before plotting.
         """
-        for i in range(len(images_and_labels)):
-            img, *rest, lbl = images_and_labels[i]
-            _, ax = plt.subplots()
-            if img.shape[0] == 3:
-                img = np.transpose(img, (1, 2, 0))
-            ax.imshow(img)
-            ax.set_title(f"Label: {lbl}")
-            ax.axis('off')
-
+        img, *rest, lbl = data
+        if img.shape[0] == 3:
+            img = np.transpose(img, (1, 2, 0))
+        plt.imshow(img)
+        plt.title(f"Label: {lbl}")
+        plt.axis('off')
         plt.show()
 
     def __getitem__(self, index: int | slice) -> tuple[np.ndarray, int] | tuple[np.ndarray, np.ndarray, int]:
@@ -182,6 +177,7 @@ class BaseDataset(Dataset):
 
         if image is None:
             raise FileNotFoundError(f"Image file {image_path} could not be loaded.")
+
         image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
         mask = None
@@ -195,22 +191,20 @@ class BaseDataset(Dataset):
                 Make sure you name the mask images the same as the image name.
                 """)
 
-        transform_keys = {'image': image, 'mask': mask} if mask_path else {'image': image}
-
         if self.transform:
-            transformed = self.transform(**transform_keys)
-            image, mask = transformed['image'], transformed['mask']
+            image = self.transform(image)
+            if mask is not None:
+                mask = self.transform(mask)
+            if self._class_colors and mask.shape[0] == 3 and len(mask.shape) == 3:
+                self._logger.info("RGB mask detected with shape: %s. Converting to class mask.", mask.shape)
+                mask = rgb_to_mask(mask, self._class_colors)
+                self._logger.info("Mask converted with new shape: %s", mask.shape)
 
         match self.return_type:
             case 'image':
                 data = image, label
             case 'image+mask':
                 data = image, mask
-                self._logger.debug("Image shape and dtype: %s, %s", image.shape, image.dtype)
-                self._logger.debug("Image: %s", image)
-                self._logger.debug("Mask shape and dtype: %s, %s", mask.shape, mask.dtype)
-                self._logger.debug("Mask: %s", mask)
-                self._logger.debug("Unique values in mask: %s", np.unique(mask))
             case 'image+label':
                 data = image, label
             case 'all':
@@ -240,17 +234,16 @@ class Excavators(Enum):
     TRACTOR = 10
     TRUCK = 11
 
-
 class ExcavatorDataset(BaseDataset):
     """
-    Excavator dataset class.
+    **Note**: this dataset does not support slice-wise indexing. To load multiple images, use a `dataloader` instead.
     """
     def __init__(self,
                  train_img_data_dir: str = TRAIN_IMG_DATA_PATH_EXCAVATOR,
                  train_mask_data_dir: str = TRAIN_MASK_DATA_PATH_EXCAVATOR,
                  test_img_data_dir: str = TEST_IMG_DATA_PATH_EXCAVATOR,
                  test_mask_data_dir: str = TEST_MASK_DATA_PATH_EXCAVATOR,
-                 transform: A.Compose = None,
+                 transform: transforms = None,
                  plot: bool = False,
                  verbose: bool = False,
                  purpose: str = 'train',
@@ -281,40 +274,22 @@ class ExcavatorDataset(BaseDataset):
             Excavators.TRUCK: np.array([134, 34, 255]),
         }
         # Normalize and convert to tensors
-        self._normalized_class_colors = {
+        self._class_colors = {
             key: torch.tensor(value / 255.0, dtype=torch.float32)
             for key, value in self._class_colors.items()
         }
 
-    def rgb_to_mask(self, rgb_mask: torch.Tensor) -> torch.Tensor:
-        """
-        Converts RGB mask image to class index mask image.
-        **Note**: broadcast the mask to shape (3xHxW) before passing it to this method.
-
-        :param rgb_mask: RGB mask image tensor with shape (3, H, W)
-
-        :return: Class index mask image
-        """
-        if not rgb_mask.shape[0] == 3:
-            raise ValueError(f"RGB mask image has to have shape (3, H, W). Got shape: {rgb_mask.shape} Use `torch.permute` to change the shape.")
-
-        mask = torch.zeros((rgb_mask.shape[-2], rgb_mask.shape[-1]), dtype=torch.float32)
-        for cls, color in self._normalized_class_colors.items():
-            mask[torch.all(rgb_mask.to(torch.float32) == color.view(3,1,1), axis=0)] = cls.value
-        return mask
-
-
 if __name__ == "__main__":
     from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
-    transformer = A.Compose([
-        A.Resize(640, 640),
-        ToTensorV2()
+    transformer = transforms.Compose([
+        transforms.ToTensor(),
+        transforms.Resize((640, 640)),
     ])
     excavator_data = ExcavatorDataset(transform=transformer, plot=False)
     img, mask = excavator_data[0]
     print("Shape of image:", img.shape)
-    plt.imshow(mask)
+    plt.imshow(mask.permute(1,2,0))
     print("Shape of mask:", mask.shape)
     # cls_mask = excavator_data.rgb_to_mask(mask.permute(2, 0, 1))
     # print("Unique values in mask:", torch.unique(cls_mask))
