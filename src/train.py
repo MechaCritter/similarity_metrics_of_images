@@ -1,4 +1,5 @@
 from typing import Union
+import time
 
 import numpy as np
 from sklearn.decomposition import PCA
@@ -6,14 +7,14 @@ from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
 
 from src.utils import load_model
+from src.config import IMAGE_SIZE
 from src.metrics import VLAD, FisherVector
 from utils import sift, resize, root_sift, standardize_data, save_model
-from datasets import BaseDataset
+from src.datasets import *
 
 # --k_means-- #
 def train_and_save_k_means_model(data_set: BaseDataset,
                                  num_clusters: int,
-                                 resized_img_size: int=256,
                                  feature: str='sift',
                                  test = False,
                                  model_path: str='models/pickle_model_files/k_means_model.pkl') -> None:
@@ -24,7 +25,6 @@ def train_and_save_k_means_model(data_set: BaseDataset,
 
     :param data_set: CustomDataSet object
     :param num_clusters: number of clusters
-    :param resized_img_size: size to resize the image (square)
     :param feature: 'sift' or 'root_sift'
     :param test: if True, only 10 images are used for training
     :param model_path: path to save the model
@@ -32,7 +32,6 @@ def train_and_save_k_means_model(data_set: BaseDataset,
     :raises ValueError: If the length of the descriptor vector is not 128
     :raises ValueError: If the feature is not 'sift' or 'root_sift'
     """
-    flower_data = data_set[0:] if not test else data_set[0:10]
     sift_vectors_list = np.empty((0, 128))
     if feature == 'sift':
         feature_extractor = sift
@@ -40,22 +39,21 @@ def train_and_save_k_means_model(data_set: BaseDataset,
         feature_extractor = root_sift
     else:
         raise ValueError(f"Feature has to be 'sift' or 'root_sift'. {feature} is not supported.")
-    for img in flower_data:
-        _, descriptors = feature_extractor(resize(img[0], resized_img_size))
-        for descriptor in descriptors:
-            if len(descriptor) != 128:
-                raise ValueError("Length of descriptor vector has to be 128.")
-
-            sift_vectors_list = np.append(sift_vectors_list, [descriptor], axis=0)
+    for i, (img, *rest) in enumerate(data_set):
+        _, descriptors = feature_extractor(resize(img, IMAGE_SIZE))
+        sift_vectors_list = np.append(sift_vectors_list, descriptors, axis=0)
+        if test and i == 9:
+            print("Done loading test images.")
+            break
 
     k_means_model = KMeans(n_clusters=num_clusters, random_state=42)
     print(f"""
-    Training KMeans model with {num_clusters} clusters on {len(flower_data)} images.
+    Training KMeans model with {num_clusters} clusters on {i+1} images.
     - Number of descriptors: {len(sift_vectors_list)}
-    - Images are resized to {resized_img_size}x{resized_img_size}
+    - Images are resized to {IMAGE_SIZE[0]}x{IMAGE_SIZE[1]}
     - Using feature: {feature}
         """)
-    k_means_model.fit(sift_vectors_list)
+    k_means_model.fit(sift_vectors_list.astype(np.float32))
     print("K-Means model trained successfully. Start saving the model...")
     save_model(k_means_model, model_path)
     print("K-Means model saved successfully.")
@@ -63,7 +61,6 @@ def train_and_save_k_means_model(data_set: BaseDataset,
 # --gmm-- #
 def train_and_save_gmm_model(data_set: BaseDataset,
                              num_clusters: int,
-                             resized_img_size: int = 256,
                              feature: str='sift',
                              test = False,
                              model_path: str='models/pickle_model_files/gmm_model.pkl') -> None:
@@ -76,13 +73,11 @@ def train_and_save_gmm_model(data_set: BaseDataset,
     :param feature: 'sift' or 'root_sift'
     :param model_path: path to save the model
     :param num_clusters: number of clusters
-    :param resized_img_size: size to resize the image (square)
     :param test: if True, only 10 images are used for training
 
     :raises ValueError: If the length of the descriptor vector is not 128
     :raises ValueError: If the feature is not 'sift' or 'root_sift'
     """
-    flower_data = data_set[0:] if not test else data_set[0:10]
     sift_vectors_list = np.empty((0, 128))
     if feature == 'sift':
         feature_extractor = sift
@@ -90,22 +85,21 @@ def train_and_save_gmm_model(data_set: BaseDataset,
         feature_extractor = root_sift
     else:
         raise ValueError(f"Feature has to be 'sift' or 'root_sift'. {feature} is not supported.")
-    for img in flower_data:
-        _, descriptors = feature_extractor(resize(img[0], resized_img_size))
-        for descriptor in descriptors:
-            if len(descriptor) != 128:
-                raise ValueError("Length of descriptor vector has to be 128.")
-
-            sift_vectors_list = np.append(sift_vectors_list, [descriptor], axis=0)
+    for i, (img, *rest) in enumerate(data_set):
+        _, descriptors = feature_extractor(resize(img, IMAGE_SIZE))
+        sift_vectors_list = np.append(sift_vectors_list, descriptors, axis=0)
+        if test and i == 9:
+            print("Done loading test images.")
+            break
 
     gmm_model = GaussianMixture(n_components=num_clusters, random_state=42, covariance_type='diag')
     print(f"""
-    Training GMM model with {num_clusters} clusters on {len(flower_data)} images.
+    Training GMM model with {num_clusters} clusters on {i+1} images.
     - Number of descriptors: {len(sift_vectors_list)}
-    - Images are resized to {resized_img_size}x{resized_img_size}
+    - Images are resized to {IMAGE_SIZE[0]}x{IMAGE_SIZE[1]}
     - Using feature: {feature}
         """)
-    gmm_model.fit(sift_vectors_list)
+    gmm_model.fit(sift_vectors_list.astype(np.float32))
     print("GMM model trained successfully. Start saving the model...")
     save_model(gmm_model, model_path)
     print("GMM model saved successfully.")
@@ -118,6 +112,7 @@ def train_and_save_pca_model(data_set: BaseDataset,
                              test = False,
                              model_path: str='models/pickle_model_files/pca_model.pkl') -> None:
         """
+        TODO: specify number of input and output features in the name of the model file.
         Trains the PCA model on the given features matrix and saves it as a .pkl file.
 
         **Note**: train the k-means or gmm model, then use these models to get the features matrix.
@@ -158,19 +153,36 @@ def train_and_save_pca_model(data_set: BaseDataset,
         save_model(pca, model_path)
         print("PCA model saved successfully.")
 
+
+def main():
+    """
+    Trains and saves the KMeans and GMM models for the SIFT and RootSIFT features.
+    - Features used: SIFT, RootSIFT
+    - Number of clusters: 32, 64, 128, 256
+    """
+    data_set = ExcavatorDataset(return_type='image', purpose='train')
+    num_clusters = [32, 64, 128, 256]
+    for num_cluster in num_clusters:
+        for feature in ['sift', 'root_sift']:
+            train_and_save_gmm_model(data_set,
+                                     num_cluster,
+                                     feature=feature,
+                                     test=False,
+                                     model_path=f'models/pickle_model_files/gmm_model_k{num_cluster}_{feature}.pkl')
+            train_and_save_k_means_model(data_set,
+                                         num_cluster,
+                                         feature=feature,
+                                         test=False,
+                                         model_path=f'models/pickle_model_files/k_means_model_k{num_cluster}_{feature}.pkl')
+
 if __name__ == '__main__':
-    data_set = BaseDataset(purpose='train')
-    vlad_list = []
-    k_means_model = load_model('models/pickle_model_files/k_means16_excavator.pkl')
-    print("Shape of VLAD list: ", np.array(vlad_list).shape)
-    print("Training PCA model...")
-    train_and_save_pca_model(data_set, 'vlad', k_means_model, 512)
+    start = time.time()
+    main()
+    print(f"Time taken: {time.time()-start:.2f} seconds.")
 
 
-# if __name__ == '__main__':
-#     flower_data_set = CustomDataSet(purpose='train', shuffle=True, equal_class_distribution=True)
-#     gmm_model = GlobalGMM(num_clusters=4)
-#     train_gmm_model(flower_data_set, gmm_model)
+
+
 
 
 

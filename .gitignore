@@ -158,3 +158,5 @@ cython_debug/
 data/
 logs/
 notebooks/
+models/pickle_model_files/
+models/torch_model_files/
