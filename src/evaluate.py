@@ -12,7 +12,7 @@ from torchvision import transforms
 from src.metrics import *
 from src.utils import multi_class_dice_score, multiclass_iou, gaussian_blur, compress_image, get_enum_member
 from src.datasets import ExcavatorDataset, Excavators
-from models.Segmentation import UNet, DeepLabV3
+from models.Segmentation import UNetModel, DeepLabV3Model
 
 TRANSFORMER = transforms.Compose([
     transforms.ToTensor(),
@@ -53,8 +53,8 @@ def process_image(image: np.ndarray,
                   ground_truth_mask: np.ndarray,
                   k_means: KMeans,
                   gmm: GaussianMixture,
-                  u_net: UNet,
-                  deeplabv3: DeepLabV3,
+                  u_net: UNetModel,
+                  deeplabv3: DeepLabV3Model,
                   num_classes: int) -> dict:
     """
     TODO: this method should take a dataset instead of image and mask arrays.
@@ -99,8 +99,8 @@ def compute_ssim_scores(dataset: ExcavatorDataset,
                         class_enum: Type[Excavators],
                         gaussian_sigmas: list,
                         compression_qualities: list,
-                        u_net_model: UNet,
-                        deeplabv3_model: DeepLabV3,
+                        u_net_model: UNetModel,
+                        deeplabv3_model: DeepLabV3Model,
                         output_json: str='res/ssim_scores.json') -> None:
     """
     Compute SSIM and MS-SSIM scores between all image pairs in the dataset,
@@ -225,8 +225,8 @@ def compute_ssim_scores(dataset: ExcavatorDataset,
 
 if __name__ == '__main__':
     dataset = ExcavatorDataset(purpose='train', return_type='all', transform=TRANSFORMER)
-    dlv3 = DeepLabV3(model_path='models/torch_model_files/DeepLabV3.pt')
-    unet = UNet(model_path='models/torch_model_files/UNet.pt')
+    dlv3 = DeepLabV3Model(model_path='models/torch_model_files/DeepLabV3.pt')
+    unet = UNetModel(model_path='models/torch_model_files/UNet.pt')
     compute_ssim_scores(dataset=dataset,
                         class_enum=Excavators,
                         gaussian_sigmas=GAUSSIAN_SIGMAS,

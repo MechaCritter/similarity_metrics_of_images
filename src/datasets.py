@@ -1,11 +1,13 @@
 import os
 from enum import Enum
+from tkinter import Image
 from typing import Optional
 from dataclasses import dataclass
 
 import cv2
 import matplotlib.pyplot as plt
 import torch
+import torch.nn.functional as F
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from dotenv import load_dotenv
@@ -59,17 +61,19 @@ class BaseDataset(Dataset):
     """
     def __init__(self,
                  train_img_data_dir: str = TRAIN_IMG_DATA_PATH_EXCAVATOR,
-                 validation_img_data_dir: Optional[str] = None,
+                 validation_img_data_dir: Optional[str] = VALID_IMG_DATA_PATH_EXCAVATOR,
                  test_img_data_dir: str = TEST_IMG_DATA_PATH_EXCAVATOR,
-                 train_mask_data_dir: Optional[str] = None,
-                 validation_mask_data_dir: Optional[str] = None,
-                 test_mask_data_dir: Optional[str] = None,
+                 train_mask_data_dir: Optional[str] = TRAIN_MASK_DATA_PATH_EXCAVATOR,
+                 validation_mask_data_dir: Optional[str] = VALID_MASK_DATA_PATH_EXCAVATOR,
+                 test_mask_data_dir: Optional[str] = TEST_MASK_DATA_PATH_EXCAVATOR,
                  transform: transforms = None,
+                 one_hot_encode_mask: bool = False,
                  plot: bool = False,
                  verbose: bool = False,
                  purpose: str = 'train',
                  return_type: str = 'image+mask',
-                 class_colors: dict = None):
+                 class_colors: dict = None,
+                 num_classes: int = None) -> None:
         """
         Class constructor. Remember to pass data to whether train or test data directory.
         If only one path is provided, it is passed to the train dataset.
@@ -81,6 +85,8 @@ class BaseDataset(Dataset):
         :param validation_mask_data_dir: Path to the validation mask data directory (for segmentation tasks)
         :param test_mask_data_dir: Path to the test mask data directory (for segmentation tasks)
         :param transform: Transformation to apply to the images
+        :param one_hot_encode_mask: Whether to one-hot encode the mask to shape (num_classes, height, width)
+        :param return_type: Whether to return the image, mask, label or all
         :param plot: Whether to plot the images
         :param verbose: Whether to print out extra information for debugging
         :param purpose: Whether the data is for training, validation or testing
@@ -92,10 +98,13 @@ class BaseDataset(Dataset):
         self._logger.name = self.__class__.__name__
         self.max_img_to_plot: int = 10
         self.verbose: bool = verbose
+        self.one_hot_encode_mask: bool = one_hot_encode_mask
         self.plot: bool = plot
         self.return_type: str = return_type
         self.purpose: str = purpose
-        self._class_colors: str = class_colors
+        self._class_colors: dict = class_colors
+        self.num_classes = num_classes
+
 
         self._logger.debug(f"Initializing BaseDataset with purpose: {self.purpose}")
         self._logger.debug(f"Train image data directory: {train_img_data_dir}")
@@ -162,14 +171,14 @@ class BaseDataset(Dataset):
                 if img_file.endswith(".jpg"):
                     image_path = os.path.join(data_dir, label, img_file)
                     if annot_data_dir:
-                        mask_file = img_file.replace(".jpg", ".png")
+                        mask_file = img_file.replace(".jpg", "_mask.png")
                         if not os.path.exists(mask_path:=os.path.join(annot_data_dir, label, mask_file)):
                             raise FileNotFoundError(f"Mask file not found for image {image_path}. Expected path: {mask_path}")
                 self.masks.append(mask_path)
                 self.images.append(image_path)
                 self.labels.append(label)
 
-    def __getitem__(self, index: int) -> ImageData:
+    def __getitem__(self, index: int) -> tuple | ImageData:
         """
         Get the image, mask, and label at the specified index. If `plot` is set to True, `plot_image` is called.
 
@@ -197,17 +206,15 @@ class BaseDataset(Dataset):
         mask_path = self.masks[index] if self.masks[index] else None
 
         self._logger.info("Retrieving image %s with label %s", image_path, label)
-        image_array = cv2.imread(image_path)
+        image_array = cv2.cvtColor(cv2.imread(image_path), cv2.COLOR_BGR2RGB)
 
         if image_array is None:
             raise FileNotFoundError(f"Image file {image_path} could not be loaded.")
 
-        image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
-
         mask = None
         if mask_path:
             self._logger.info("Masks are detected for dataset %s", self.__class__.__name__)
-            mask = cv2.imread(mask_path, cv2.IMREAD_COLOR)
+            mask = cv2.cvtColor(cv2.imread(mask_path, cv2.IMREAD_COLOR), cv2.COLOR_BGR2RGB)
             if mask is None:
                 raise FileNotFoundError(f"""
                 Mask not found for image {image_path}
@@ -223,14 +230,22 @@ class BaseDataset(Dataset):
                 self._logger.info("RGB mask detected with shape: %s. Converting to class mask.", mask.shape)
                 mask = rgb_to_mask(mask, self._class_colors)
                 self._logger.info("Mask converted with new shape: %s", mask.shape)
-
+            if self.one_hot_encode_mask:
+                mask = F.one_hot(mask.long(), num_classes=self.num_classes).permute(2, 0, 1).float()
         if self.plot:
             plot_image(image_array, title=f"Image: {index}, label: {label}")
 
-        return ImageData(image_array=image_array,
-                         mask_array=mask,
-                         label=label,
-                         image_path=image_path)
+        match self.return_type:
+            case 'image':
+                return image_array
+            case 'image+mask':
+                return image_array, mask
+            case 'image+label':
+                return image_array, label
+            case 'image+mask+label':
+                return image_array, mask, label
+            case 'all':
+                return ImageData(image_array=image_array, mask_array=mask, label=label, image_path=image_path)
 
     def __len__(self) -> int:
         return len(self.images)
@@ -254,39 +269,40 @@ class ExcavatorDataset(BaseDataset):
     **Note**: this dataset does not support slice-wise indexing. To load multiple images, use a `dataloader` instead.
     """
     def __init__(self,
-                 train_img_data_dir: str = TRAIN_IMG_DATA_PATH_EXCAVATOR,
-                 train_mask_data_dir: str = TRAIN_MASK_DATA_PATH_EXCAVATOR,
-                 test_img_data_dir: str = TEST_IMG_DATA_PATH_EXCAVATOR,
-                 test_mask_data_dir: str = TEST_MASK_DATA_PATH_EXCAVATOR,
                  transform: transforms = None,
+                 one_hot_encode_mask: bool = False,
                  plot: bool = False,
                  verbose: bool = False,
                  purpose: str = 'train',
                  return_type: str = 'image+mask',
                  class_colors: dict = None) -> None:
-        super().__init__(train_img_data_dir=train_img_data_dir,
-                         train_mask_data_dir=train_mask_data_dir,
-                         test_img_data_dir=test_img_data_dir,
-                         test_mask_data_dir=test_mask_data_dir,
+        super().__init__(train_img_data_dir=TRAIN_IMG_DATA_PATH_EXCAVATOR,
+                         train_mask_data_dir=TRAIN_MASK_DATA_PATH_EXCAVATOR,
+                         test_img_data_dir=TEST_IMG_DATA_PATH_EXCAVATOR,
+                         test_mask_data_dir=TEST_MASK_DATA_PATH_EXCAVATOR,
+                         validation_img_data_dir=VALID_IMG_DATA_PATH_EXCAVATOR,
+                        validation_mask_data_dir=VALID_MASK_DATA_PATH_EXCAVATOR,
                          transform=transform,
+                         one_hot_encode_mask=one_hot_encode_mask,
                          plot=plot,
                          verbose=verbose,
                          purpose=purpose,
                          return_type=return_type,
-                         class_colors=class_colors)
-        self._class_colors = {
+                         class_colors=class_colors,
+                         num_classes=len(Excavators))
+        self._class_colors = { # RGB colors for each class
             Excavators.BACKGROUND: torch.from_numpy(np.array([0, 0, 0])),
-            Excavators.BULLDOZER: torch.from_numpy(np.array([0, 183, 235])),
-            Excavators.CAR: np.array([255, 255, 0]),
-            Excavators.CATERPILLAR: np.array([0, 16, 235]),
-            Excavators.CRANE: np.array([199, 252, 0]),
-            Excavators.CRUSHER: np.array([255, 0, 140]),
-            Excavators.DRILLER: np.array([14, 122, 254]),
-            Excavators.EXCAVATOR: np.array([255, 171, 171]),
-            Excavators.HUMAN: np.array([254, 0, 86]),
+            Excavators.BULLDOZER: torch.from_numpy(np.array([235, 183, 0])),
+            Excavators.CAR: np.array([0, 255, 255]),
+            Excavators.CATERPILLAR: np.array([235, 16, 0]),
+            Excavators.CRANE: np.array([0, 252, 199]),
+            Excavators.CRUSHER: np.array([140, 0, 255]),
+            Excavators.DRILLER: np.array([254, 122, 14]),
+            Excavators.EXCAVATOR: np.array([171, 171, 255]),
+            Excavators.HUMAN: np.array([86, 0, 254]),
             Excavators.ROLLER: np.array([255, 0, 255]),
-            Excavators.TRACTOR: np.array([128, 128, 0]),
-            Excavators.TRUCK: np.array([134, 34, 255]),
+            Excavators.TRACTOR: np.array([0, 128, 128]),
+            Excavators.TRUCK: np.array([255, 34, 134]),
         }
         # Normalize and convert to tensors
         self._class_colors = {
@@ -295,7 +311,6 @@ class ExcavatorDataset(BaseDataset):
         }
 
 if __name__ == "__main__":
-    import matplotlib.pyplot as plt
     transformer = transforms.Compose([
         transforms.ToTensor(),
         transforms.Resize((640, 640)),

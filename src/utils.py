@@ -21,9 +21,6 @@ from src.config import setup_logging
 
 setup_logging()
 
-_logger_ife = logging.getLogger("Image_Feature_Extractor")
-_logger_ip = logging.getLogger("Image_Processor")
-
 
 # Decorators
 def check_is_image(func: callable):
@@ -60,7 +57,9 @@ def get_centroids(data: np.ndarray, num_clusters: int):
     return kmeans.cluster_centers_, kmeans.labels_
 
 
-def create_and_plot_synthetic_data(lower_limit: float, upper_limit: float, num_samples: int,
+def create_and_plot_synthetic_data(lower_limit: float,
+                                   upper_limit: float,
+                                   num_samples: int,
                                    plot_type: str = 'scatter'):
     """
     Generates synthetic data and plots it.
@@ -121,6 +120,7 @@ def mask_to_rgb(class_mask: torch.Tensor , class_colors: dict[int, torch.Tensor]
     Converts class index mask image to RGB mask image.
 
     :param class_mask: Class index mask image tensor with shape (H, W)
+    :param class_colors: Dictionary containing class enum objects as key and normalized RGB color as value
 
     :return: RGB mask image tensor with shape (3, H, W)
     """
@@ -476,7 +476,7 @@ def thresholding(image, threshold_value=None, max_value=255, threshold_types: tu
     """
     gray_image = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
     ret, thresholded_image = cv2.threshold(gray_image, threshold_value, max_value, np.sum(threshold_types))
-    _logger_ip.debug(f"Threshold value used: {threshold_value}")
+    logging.debug(f"Threshold value used: {threshold_value}")
     return thresholded_image
 
 @check_is_image
@@ -581,7 +581,7 @@ def difference_of_gaussian(image: np.ndarray,
     for octave in range(num_octaves):
         gaussian_images = []
         current_sigma = sigma
-        _logger_ife.info(f"""
+        logging.info(f"""
         Calculating DoG for octave {octave} with {num_intervals} intervals and sigma={sigma}:
         
         =====================================================================================\n
@@ -589,7 +589,7 @@ def difference_of_gaussian(image: np.ndarray,
 
         for _ in range(octave_range):
             gaussian_images.append(gaussian_blur(image, sigma=current_sigma))
-            _logger_ife.debug(f"Sigma value used: {current_sigma}")
+            logging.debug(f"Sigma value used: {current_sigma}")
             current_sigma *= k
 
         # Calculate DoG and append to the octave images
@@ -598,10 +598,10 @@ def difference_of_gaussian(image: np.ndarray,
             octave_images.append(dog)
 
         # Downsample the image by factor of 2 for the next octave
-        _logger_ife.debug(f"Current image shape: {image.shape}")
+        logging.debug(f"Current image shape: {image.shape}")
         image = resize(image, (image.shape[1] // 2, image.shape[0] // 2))
 
-    _logger_ife.debug("Total number of octave images: %s", len(octave_images))
+    logging.debug("Total number of octave images: %s", len(octave_images))
     if plot:
         plt.figure(figsize=(25, 10))
         for i in range(num_octaves):
@@ -618,6 +618,34 @@ def difference_of_gaussian(image: np.ndarray,
         plt.show()
     return octave_images
 
+
+@check_is_image
+def denoise_mask(mask: np.ndarray, min_size: int) -> np.ndarray:
+    """
+    Denoises the input binary mask image by removing components smaller than the specified minimum size.
+
+    :param mask: Input binary mask (HxW)
+    :param min_size: Minimum pixel size for components to retain
+
+    :returns: Processed mask with only components of size >= min_size, retaining original class values.
+    """
+    filtered_mask = np.zeros_like(mask, dtype=np.uint8)
+
+    for class_value in np.unique(mask):
+        logging.debug("List of classes before being filtered: %s", class_value)
+        if class_value == 0:  # Skip the background class
+            continue
+
+        class_mask = np.where(mask == class_value, 255, 0).astype(
+            np.uint8)  # Classes of question are set to 255. The rest is 0.
+        num_labels, labels, stats, _ = cv2.connectedComponentsWithStats(class_mask, connectivity=4)
+        for i in range(1, num_labels):
+            component_size = stats[i, cv2.CC_STAT_AREA]
+            if component_size >= min_size:
+                filtered_mask[labels == i] = class_value
+
+    logging.debug("List of classes after being filtered: %s", np.unique(filtered_mask))
+    return filtered_mask
 
 if __name__ == "__main__":
     import matplotlib.pyplot as plt
