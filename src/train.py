@@ -5,12 +5,18 @@ import numpy as np
 from sklearn.decomposition import PCA
 from sklearn.cluster import KMeans
 from sklearn.mixture import GaussianMixture
+from torch.utils.data import Dataset
 
 from src.utils import load_model
 from src.config import IMAGE_SIZE
 from src.metrics import VLAD, FisherVector
 from utils import sift, resize, root_sift, standardize_data, save_model
 from src.datasets import *
+
+# TODO: Marius fragen, ob:
+# 1. Similarity-Clustering für jede Metrik getrennt gemacht werden soll
+# 2. Wie viele clusters sind nötig
+# 3. Was machen mit diesen CLusters?
 
 # --k_means-- #
 def train_and_save_k_means_model(data_set: BaseDataset,
@@ -39,8 +45,9 @@ def train_and_save_k_means_model(data_set: BaseDataset,
         feature_extractor = root_sift
     else:
         raise ValueError(f"Feature has to be 'sift' or 'root_sift'. {feature} is not supported.")
-    for i, (img, *rest) in enumerate(data_set):
-        _, descriptors = feature_extractor(resize(img, IMAGE_SIZE))
+    for i, image_data in enumerate(data_set):
+        image_array = image_data.image_array
+        _, descriptors = feature_extractor(resize(image_array, IMAGE_SIZE))
         sift_vectors_list = np.append(sift_vectors_list, descriptors, axis=0)
         if test and i == 9:
             print("Done loading test images.")
@@ -85,8 +92,9 @@ def train_and_save_gmm_model(data_set: BaseDataset,
         feature_extractor = root_sift
     else:
         raise ValueError(f"Feature has to be 'sift' or 'root_sift'. {feature} is not supported.")
-    for i, (img, *rest) in enumerate(data_set):
-        _, descriptors = feature_extractor(resize(img, IMAGE_SIZE))
+    for i, image_data in enumerate(data_set):
+        image_array = image_data.image_array
+        _, descriptors = feature_extractor(resize(image_array, IMAGE_SIZE))
         sift_vectors_list = np.append(sift_vectors_list, descriptors, axis=0)
         if test and i == 9:
             print("Done loading test images.")
@@ -120,6 +128,7 @@ def train_and_save_pca_model(data_set: BaseDataset,
 
         :param data_set: CustomDataSet object
         :param feature_type: 'vlad' or 'fisher'
+        :param cluster_model: KMeans (for VLAD) or GaussianMixture (for Fisher)
         :param num_components: number of components to keep
         :param model_path: path to save the model
         :param test: if True, only 10 images are used for training
@@ -167,13 +176,21 @@ def main():
             train_and_save_gmm_model(data_set,
                                      num_cluster,
                                      feature=feature,
-                                     test=True,
+                                     test=True, # Set to False for training on the whole dataset
                                      model_path=f'models/pickle_model_files/gmm_model_k{num_cluster}_{feature}.pkl')
+
             train_and_save_k_means_model(data_set,
                                          num_cluster,
                                          feature=feature,
-                                         test=True,
+                                         test=True, # Set to False for training on the whole dataset
                                          model_path=f'models/pickle_model_files/k_means_model_k{num_cluster}_{feature}.pkl')
+
+    # Train PCA model
+    # TODO: for each model, num_components = length_of_features_vector / 2
+
+
+
+    # Train PCA model
 
 if __name__ == '__main__':
     start = time.time()

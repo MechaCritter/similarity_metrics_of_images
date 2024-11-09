@@ -1,26 +1,62 @@
 import os
 from enum import Enum
 from typing import Optional
+from dataclasses import dataclass
 
 import cv2
+import matplotlib.pyplot as plt
 import torch
 import numpy as np
 from torch.utils.data import Dataset, DataLoader
-import matplotlib.pyplot as plt
 from dotenv import load_dotenv
 
 from src.config import *
-from src.utils import rgb_to_mask, mask_to_rgb
+from src.utils import rgb_to_mask, mask_to_rgb, plot_image
 
 setup_logging()
 load_dotenv()
 
+__all__ = ['ExcavatorDataset', 'Excavators', 'BaseDataset']
+
+@dataclass
+class ImageData:
+    image_array: np.ndarray
+    mask_array: Optional[np.ndarray] = None
+    label: Optional[str] = None
+    image_path: Optional[str] = None
 
 class BaseDataset(Dataset):
     """
     **Note**: this dataset does not support slice-wise indexing. To load multiple images, use a `dataloader` instead.
+
+    Base class for datasets used in this project. The folder structure of all child classes should be as follows:
+
+    ```
+    data
+    ├── train
+    │   ├── class1
+    │   │   ├── image1.jpg
+    │   │   ├── image2.jpg
+    │   │   └── ...
+    │   ├── class2
+    │   │   ├── image1.jpg
+    │   │   ├── image2.jpg
+    │   │   └── ...
+    │   └── ...
+    ├── test
+    │   ├── class1
+    │   │   ├── image1.jpg
+    │   │   ├── image2.jpg
+    │   │   └── ...
+    │   ├── class2
+    │   │   ├── image1.jpg
+    │   │   ├── image2.jpg
+    │   │   └── ...
+
+    ```
+
+    Since no CNN was trained, no validation data is used. Hence, the `validation` data directory is optional.
     """
-    purpose: str
     def __init__(self,
                  train_img_data_dir: str = TRAIN_IMG_DATA_PATH_EXCAVATOR,
                  validation_img_data_dir: Optional[str] = None,
@@ -133,52 +169,40 @@ class BaseDataset(Dataset):
                 self.images.append(image_path)
                 self.labels.append(label)
 
-    def _plot_image(self, data: tuple) -> None:
-        """
-        Plot the image with its file path and label. Only call from inside.
-        If image shape of (3, width, height) is passed, it is converted to (width, height, 3) before plotting.
-        """
-        img, *rest, lbl = data
-        if img.shape[0] == 3:
-            img = np.transpose(img, (1, 2, 0))
-        plt.imshow(img)
-        plt.title(f"Label: {lbl}")
-        plt.axis('off')
-        plt.show()
-
-    def __getitem__(self, index: int | slice) -> tuple[np.ndarray, int] | tuple[np.ndarray, np.ndarray, int]:
+    def __getitem__(self, index: int) -> ImageData:
         """
         Get the image, mask, and label at the specified index. If `plot` is set to True, `plot_image` is called.
 
         :param index: Index of the image to retrieve
 
-        :return: Image, mask (if available), and label at the specified index based on `return_type`
+        :return: Image, mask, label and path, depending on the `return_type`
 
         :raises IndexError: If the index is out of range
-        :raises ValueError: If `return_type` is invalid
+        :raises ValueError: If `return_type` is invalid or slicing is used
+        :raises FileNotFoundError: If the image or mask file is not found
         """
         self._logger.debug(f"Retrieving item at index: {index} with return type: {self.return_type}")
 
         if isinstance(index, slice):
-            start, stop, step = index.indices(len(self.images))
-            if stop > len(self.images) or start < 0:
-                raise IndexError(
-                    f"Index out of range. Data for {self.purpose} purpose only contains {len(self.images)} images.")
+            raise ValueError("Slicing is not supported for this dataset. Use a dataloader instead.")
         elif index >= len(self.images) or index < 0:
             raise IndexError(
                 f"Index out of range. Data for {self.purpose} purpose only contains {len(self.images)} images.")
+
+        if not self.return_type in ['image', 'image+mask', 'image+label', 'image+mask+label', 'all']:
+            raise ValueError(f"`return_type` has to be whether 'image', 'image+mask', 'image+label', 'image+mask+label' or 'all'. not {self.return_type}")
 
         image_path = self.images[index]
         label = self.labels[index]
         mask_path = self.masks[index] if self.masks[index] else None
 
         self._logger.info("Retrieving image %s with label %s", image_path, label)
-        image = cv2.imread(image_path)
+        image_array = cv2.imread(image_path)
 
-        if image is None:
+        if image_array is None:
             raise FileNotFoundError(f"Image file {image_path} could not be loaded.")
 
-        image = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+        image_array = cv2.cvtColor(image_array, cv2.COLOR_BGR2RGB)
 
         mask = None
         if mask_path:
@@ -192,7 +216,7 @@ class BaseDataset(Dataset):
                 """)
 
         if self.transform:
-            image = self.transform(image)
+            image_array = self.transform(image_array)
             if mask is not None:
                 mask = self.transform(mask)
             if self._class_colors and mask.shape[0] == 3 and len(mask.shape) == 3:
@@ -200,22 +224,13 @@ class BaseDataset(Dataset):
                 mask = rgb_to_mask(mask, self._class_colors)
                 self._logger.info("Mask converted with new shape: %s", mask.shape)
 
-        match self.return_type:
-            case 'image':
-                data = image, label
-            case 'image+mask':
-                data = image, mask
-            case 'image+label':
-                data = image, label
-            case 'all':
-                data = image, mask, label
-            case _:
-                raise ValueError(f"`return_type` has to be whether 'image', 'image+mask', 'image+label' or 'all'. not {self.return_type}")
-
         if self.plot:
-            self._plot_image(data)
+            plot_image(image_array, title=f"Image: {index}, label: {label}")
 
-        return data
+        return ImageData(image_array=image_array,
+                         mask_array=mask,
+                         label=label,
+                         image_path=image_path)
 
     def __len__(self) -> int:
         return len(self.images)
@@ -248,7 +263,7 @@ class ExcavatorDataset(BaseDataset):
                  verbose: bool = False,
                  purpose: str = 'train',
                  return_type: str = 'image+mask',
-                 class_colors: dict = None):
+                 class_colors: dict = None) -> None:
         super().__init__(train_img_data_dir=train_img_data_dir,
                          train_mask_data_dir=train_mask_data_dir,
                          test_img_data_dir=test_img_data_dir,
@@ -257,7 +272,7 @@ class ExcavatorDataset(BaseDataset):
                          plot=plot,
                          verbose=verbose,
                          purpose=purpose,
-                            return_type=return_type,
+                         return_type=return_type,
                          class_colors=class_colors)
         self._class_colors = {
             Excavators.BACKGROUND: torch.from_numpy(np.array([0, 0, 0])),
@@ -280,18 +295,25 @@ class ExcavatorDataset(BaseDataset):
         }
 
 if __name__ == "__main__":
-    from torch.utils.data import DataLoader
     import matplotlib.pyplot as plt
     transformer = transforms.Compose([
         transforms.ToTensor(),
         transforms.Resize((640, 640)),
     ])
-    excavator_data = ExcavatorDataset(transform=transformer, plot=False)
-    img, mask = excavator_data[0]
-    print("Shape of image:", img.shape)
-    plt.imshow(mask.permute(1,2,0))
-    print("Shape of mask:", mask.shape)
-    # cls_mask = excavator_data.rgb_to_mask(mask.permute(2, 0, 1))
-    # print("Unique values in mask:", torch.unique(cls_mask))
+    # train_data = ExcavatorDataset(transform=transformer, purpose='train', return_type='all')
+    test_data  = ExcavatorDataset(transform=transformer, purpose='test', return_type='all', plot=True)
+    # for i, data in enumerate(train_data):
+    #     print("Image: ", data.image_array.shape)
+    #     print("Mask: ", data.mask_array.shape)
+    #     print("Label: ", data.label)
+    #     print("Path: ", data.image_path)
+    #     if i > 10:
+    #         break
 
-    plt.show()
+    for i, data in enumerate(test_data):
+        print("Image: ", data.image_array.shape)
+        print("Mask: ", data.mask_array.shape)
+        print("Label: ", data.label)
+        print("Path: ", data.image_path)
+        if i > 100:
+            break

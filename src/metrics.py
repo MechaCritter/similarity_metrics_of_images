@@ -15,6 +15,8 @@ from src.config import setup_logging
 
 setup_logging()
 
+__all__ = ["VLAD", "FisherVector", "SSIM", "MS_SSIM"]
+
 _logger_vv = logging.getLogger("VLAD_Vector")
 _logger_fv = logging.getLogger("Fisher_Vector")
 
@@ -22,7 +24,6 @@ _logger_fv = logging.getLogger("Fisher_Vector")
 @dataclass
 class ClusteringBasedMetric:
     """
-    TODO: if root_sift is used as feature, high similarity is yielded no matter the images. Investigate why.
     TODO: remind user to specify 'sift' or 'root_sift' as feature when using VLAD or Fisher Vector based on the clustering model loaded.
     Base class for clustering-based metrics (metrics that use k-means or GMM). Used for VLAD and Fischer Vector calculations.
 
@@ -250,11 +251,15 @@ class FisherVector(ClusteringBasedMetric):
 @dataclass
 class StructuralSimilarity:
     """
-    Base class for SSIM and MS-SSIM metrics. Used for comparing two images.
+    Base class for SSIM and MS-SSIM metrics. Used for comparing two images. Pass images with shape (C, H, W) as input.
+
+    :image_1: The first image to compare. Shape: (C, H, W).
+    :image_2: The second image to compare. Shape: (C, H, W).
+    :data_range: 1.0 for float images, 255 for uint8 images.
     """
-    image_1: np.ndarray = field(repr=False)
-    image_2: np.ndarray = field(repr=False)
-    data_range: float = 255
+    image_1: torch.Tensor = field(repr=False)
+    image_2: torch.Tensor = field(repr=False)
+    data_range: float = 1.0
 
 @dataclass
 class SSIM(StructuralSimilarity):
@@ -264,9 +269,7 @@ class SSIM(StructuralSimilarity):
     """
     _ssim: torch.Tensor= field(init=False)
     def __post_init__(self):
-        image_1_tensor = torch.from_numpy(self.image_1).permute(2, 0, 1).unsqueeze(0).float()
-        image_2_tensor = torch.from_numpy(self.image_2).permute(2, 0, 1).unsqueeze(0).float()
-        self._ssim = ssim(image_1_tensor, image_2_tensor, data_range=self.data_range)
+        self._ssim = ssim(self.image_1.unsqueeze(0), self.image_2.unsqueeze(0), data_range=self.data_range)
         print("SSIM:", self._ssim)
 
     @property
@@ -281,9 +284,7 @@ class MS_SSIM(StructuralSimilarity):
     """
     _ms_ssim: torch.Tensor= field(init=False)
     def __post_init__(self):
-        image_1_tensor = torch.from_numpy(self.image_1).permute(2, 0, 1).unsqueeze(0).float()
-        image_2_tensor = torch.from_numpy(self.image_2).permute(2, 0, 1).unsqueeze(0).float()
-        self._ms_ssim = ms_ssim(image_1_tensor, image_2_tensor, data_range=self.data_range)
+        self._ms_ssim = ms_ssim(self.image_1.unsqueeze(0), self.image_2.unsqueeze(0), data_range=self.data_range)
         print("MS-SSIM:", self._ms_ssim)
 
     @property
@@ -295,28 +296,28 @@ if __name__ == "__main__":
     from sklearn.metrics.pairwise import cosine_similarity
     from src.datasets import *
     data = ExcavatorDataset(plot=True)
-    image1, *_ = data[0]
-    image2, *_ = data[3]
-    k_means = load_model("models/pickle_model_files/k_means_model_k128_sift.pkl")
-    gmm = load_model("models/pickle_model_files/gmm_model_k128_sift.pkl")
+    image1 = data[1].image_array
+    image2 = data[2].image_array
+    k_means = load_model("models/pickle_model_files/k_means_model_k64_root_sift.pkl")
+    gmm = load_model("models/pickle_model_files/gmm_model_k64_root_sift.pkl")
     pca_model = load_model("models/pickle_model_files/pca_model.pkl")
 
     vlad1 = VLAD(image=image1,
                  k_means=k_means,
-                 feature="sift",
+                 feature="root_sift",
                  flatten=True).vector
     vlad2 = VLAD(image=image2,
                  k_means=k_means,
-                feature="sift",
+                feature="root_sift",
                  flatten=True).vector
     print("VLAD similarity between first two images:", cosine_similarity(vlad1.reshape(1, -1), vlad2.reshape(1, -1)))
     fisher1 = FisherVector(image=image1,
                            gmm=gmm,
-                           feature="sift",
+                           feature="root_sift",
                            flatten=True).vector
     fisher2 = FisherVector(image=image2,
                            gmm=gmm,
-                            feature="sift",
+                            feature="root_sift",
                            flatten=True).vector
     print("Fisher Vector similarity between first two images:", cosine_similarity(fisher1.reshape(1, -1), fisher2.reshape(1, -1)))
 

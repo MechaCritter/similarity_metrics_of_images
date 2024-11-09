@@ -1,14 +1,14 @@
 import logging
 import logging.config
-import yaml
 
+import yaml
 from torchvision import transforms
 
 # -Paths for the dataset- #
-TRAIN_IMG_DATA_PATH_EXCAVATOR= r"D:\bachelor_thesis\excavator_dataset_w_masks2\train_sorted"
-TRAIN_MASK_DATA_PATH_EXCAVATOR = r"D:\bachelor_thesis\excavator_dataset_w_masks2\train_annot_sorted"
-TEST_IMG_DATA_PATH_EXCAVATOR= r"D:\bachelor_thesis\excavator_dataset_w_masks2\test_sorted"
-TEST_MASK_DATA_PATH_EXCAVATOR = r"D:\bachelor_thesis\excavator_dataset_w_masks2\test_annot_sorted"
+TRAIN_IMG_DATA_PATH_EXCAVATOR= r"D:\bachelor_thesis\excavator_dataset_w_masks2\train" #TODO: change to relative paths
+TRAIN_MASK_DATA_PATH_EXCAVATOR = r"D:\bachelor_thesis\excavator_dataset_w_masks2\train_annotations"
+TEST_IMG_DATA_PATH_EXCAVATOR= r"D:\bachelor_thesis\excavator_dataset_w_masks2\test"
+TEST_MASK_DATA_PATH_EXCAVATOR = r"D:\bachelor_thesis\excavator_dataset_w_masks2\test_annotations"
 
 # -Config for the dataset- #
 IMAGE_SIZE = (640, 640)
@@ -17,7 +17,7 @@ TRANSFORMER = transforms.Compose([
     transforms.Resize(IMAGE_SIZE)
 ])
 
-def setup_logging(default_path=r"C:\Users\vunha\Documents\Uni_Infos\Bachelorarbeit\workspace\similarity_metrics_of_images\res\logging_config.yaml", default_level=logging.INFO):
+def setup_logging(default_path=r"res\logging_config.yaml", default_level=logging.INFO):
     """Setup logging configuration"""
     try:
         with open(default_path, 'rt') as f:

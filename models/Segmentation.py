@@ -156,41 +156,7 @@ class UNet:
             self._logger.debug("Average confidence of the class of interest: %s", avr_confidence)
             self._logger.debug("predicted mask: %s", pred:=predicted_mask.cpu().numpy())
             self._logger.debug("11 is in the mask: %s", 11 in pred)
-            return avr_confidence, predicted_mask
-
-    def predict_on_dataloader(self, data_loader: torch.utils.data.DataLoader, class_index: int):
-        """
-        TODO: test this method
-
-        Predict masks and confidences for all images in the data loader.
-
-        :param data_loader: DataLoader containing images and ground truth masks.
-        :param class_index: Index of the class of interest.
-        :return: List of tuples (pred_mask, average_confidence) for each image.
-        """
-        self.model.eval()
-        predictions = []
-        with torch.no_grad():
-            for batch in data_loader:
-                images, gt_masks = batch
-                images = images.to(self.device)
-                gt_masks = gt_masks.to(self.device)
-                outputs = self.model(images)
-                probabilities = torch.softmax(outputs, dim=1)
-                pred_masks = torch.argmax(probabilities, dim=1)
-
-                for i in range(images.size(0)):
-                    class_probs = probabilities[i, class_index, :, :]
-                    mask_indices = (gt_masks[i] == class_index)
-                    total_confidence = class_probs[mask_indices].sum().item()
-                    num_pixels = mask_indices.sum().item()
-                    if num_pixels == 0:
-                        average_confidence = 0.0
-                    else:
-                        average_confidence = total_confidence / num_pixels
-                    pred_mask = pred_masks[i].cpu().numpy()
-                    predictions.append((pred_mask, average_confidence))
-        return predictions
+            return avr_confidence, predicted_mask.cpu().squeeze(0)
 
 class DeepLabV3:
     def __init__(self,
@@ -334,7 +300,7 @@ class DeepLabV3:
             _, predicted_mask = torch.max(output, 1)
             self._logger.debug("Average confidence of the class of interest: %s", avr_confidence)
             self._logger.debug("Unique values in predicted mask: %s", torch.unique(predicted_mask))
-            return avr_confidence, predicted_mask
+            return avr_confidence, predicted_mask.cpu().squeeze(0)
 
 if __name__ =="__main__":
     from itertools import islice
@@ -347,13 +313,20 @@ if __name__ =="__main__":
         transforms.ToTensor(),
         transforms.Resize((640, 640)),
     ])
-    dataset = ExcavatorDataset(transform=transformer, purpose ='test')
+    dataset = ExcavatorDataset(transform=transformer, purpose ='test', return_type='all')
     #dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
-    for i , (img, mask) in enumerate(dataset):
-        print("Shape of image:", img.shape)
+    for i , img_data in enumerate(dataset, start=100):
+        img_array = img_data.image_array
+        mask = img_data.mask_array
+        label = img_data.label
+        path = img_data.image_path
+        print("Shape of image:", img_array.shape)
         print("Shape of mask:", mask.shape)
-        class_of_interest = Excavators.TRUCK
-        confidence, pred_mask = dlv3.predict_single_image(img, mask, class_of_interest)
+        print("Label:", label)
+        print("Path:", path)
+        cls_of_interest = Excavators.TRUCK
+        print("Class of interest:", cls_of_interest)
+        confidence, pred_mask = dlv3.predict_single_image(img_array, mask, cls_of_interest)
         print("Shape of predicted mask:", pred_mask.shape)
         print("Data type of predicted mask:", pred_mask.dtype)
         print("Confidence of truck:", confidence)

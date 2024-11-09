@@ -18,12 +18,12 @@ handlers:
     formatter: simple
     level: INFO
     filename: "res/log_msg.log"
-    maxBytes: 10485760  # 10MB
+    maxBytes: 256000 # 256KB
     backupCount: 3
 
 loggers:
   Data_Set:
-    level: DEBUG
+    level: INFO
     handlers: [console, file_handler]
     propagate: no
 
@@ -38,12 +38,12 @@ loggers:
     propagate: no
 
   UNet:
-    level: DEBUG
+    level: INFO
     handlers: [ console, file_handler]
     propagate: no
 
   DeepLabV3:
-    level: DEBUG
+    level: INFO
     handlers: [ console, file_handler]
     propagate: no
 

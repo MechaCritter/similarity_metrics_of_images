@@ -1,9 +1,15 @@
 import logging
 from enum import Enum
+from typing import Type, Optional
+from PIL import Image
 
 import joblib
 import numpy as np
 import torch
+import torchvision
+import torchvision.transforms.functional as TF
+import io
+import matplotlib.pyplot as plt
 import cv2
 from sklearn.cluster import KMeans
 from sklearn.metrics.pairwise import cosine_similarity
@@ -20,12 +26,19 @@ _logger_ip = logging.getLogger("Image_Processor")
 
 
 # Decorators
-def check_is_numpy_image(func: callable):
+def check_is_image(func: callable):
     def wrapper(image, *args, **kwargs):
-        if not isinstance(image, np.ndarray):
-            raise ValueError(f"Input image should be a numpy array, not {type(image)}")
+        if isinstance(image, np.ndarray):
+            if not len(image.shape) == 3:
+                raise ValueError(f"Image must have shape (H, W, C) for numpy arrays or (C, H, W) for tensors. Got {image.shape}.")
+            if image.min() < 0 or image.max() > 255:
+                raise ValueError(f"Image values must be in the range [0, 255]. Got min={image.min()} and max={image.max()}.")
+        elif torch.is_tensor(image):
+            if image.min().item() < 0.0 or image.max().item() > 1.0:
+                raise ValueError(f"Image values must be in the range [0, 1] for tensors. Got min={image.min().item()} and max={image.max().item()}.")
+        else:
+            raise ValueError(f"Input must be a numpy array or a tensor, not {type(image)}.")
         return func(image, *args, **kwargs)
-
     return wrapper
 
 
@@ -197,7 +210,21 @@ def multiclass_iou(pred_mask: torch.Tensor,
 
     return IoU(eps=1e-6, threshold=None, ignore_channels=ignore_channels)(pred_mask_one_hot, true_mask_one_hot)
 
-@check_is_numpy_image
+
+def get_enum_member(cls_of_interest: str, enum_class: Type[Enum]) -> Optional[Enum]:
+    """
+    Retrieve an enum member by its name (case-insensitive) from a given enum class.
+
+    :param cls_of_interest: The name of the enum member to look up.
+    :param enum_class: The enum class to search within.
+
+    :returns: The corresponding enum member if found, otherwise None.
+    """
+    cls_name = cls_of_interest.upper()
+    return enum_class.__members__.get(cls_name)
+
+
+@check_is_image
 def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     """
     Get the indices of pixels that have at least one non-zero channel.
@@ -211,7 +238,7 @@ def get_non_zero_pixel_indices(image: np.ndarray) -> tuple:
     return tuple(np.argwhere(np.any(image != 0, axis=-1)))
 
 
-@check_is_numpy_image
+@check_is_image
 def plot_clusters_on_image(image: np.ndarray,
                            data: np.ndarray,
                            labels: np.ndarray,
@@ -295,7 +322,6 @@ def plot_clusters_on_image(image: np.ndarray,
     plt.subplots_adjust(wspace=0.5)
     plt.grid(False)
     plt.show()
-
 
 def plot_similarity_heatmap_between_2_vectors(vector1: np.ndarray, vector2: np.ndarray, **kwargs) -> None:
     """
@@ -389,14 +415,61 @@ def load_model(file_path: str) -> object:
         return joblib.load(file)
 
 
-@check_is_numpy_image
-def gaussian_blurr(image, kernel_size=3, sigma=1.0):
-    _logger_ip.debug(f"This Gaussian kernel was used: \n"
-                     f"{cv2.getGaussianKernel(kernel_size, sigma) @ cv2.getGaussianKernel(kernel_size, sigma).T}")
-    return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
+@check_is_image
+def gaussian_blur(image: np.ndarray | torch.Tensor, kernel_size: int=3, sigma: float=1.0) -> np.ndarray | torch.Tensor:
+    """
+    Apply Gaussian blurring to the given image.
+
+    :param image: Input image
+    :param kernel_size: Size of the kernel
+    :param sigma: Standard deviation of the kernel
+
+    :return: Blurred image
+    """
+    if isinstance(image, np.ndarray):
+        return cv2.GaussianBlur(image, (kernel_size, kernel_size), sigma)
+    elif torch.is_tensor(image):
+        return TF.gaussian_blur(image, [kernel_size, kernel_size], [sigma, sigma]).clamp(0.0, 1.0)
 
 
-@check_is_numpy_image
+@check_is_image
+def compress_image(image: np.ndarray | torch.Tensor, quality: int) -> np.ndarray | torch.Tensor:
+    """
+    Compress the image using JPEG compression at the specified quality.
+
+    :param image: Input image
+    :param quality: Quality for JPEG compression (0 to 100).
+    :return: Compressed image
+    """
+    # Ensure quality is within the valid range
+    quality = max(0, min(quality, 100))
+    if isinstance(image, np.ndarray):
+        # Convert numpy array to PIL Image
+        img = Image.fromarray(image.astype(np.uint8))
+        # Compress image using BytesIO
+        buffer = io.BytesIO()
+        img.save(buffer, format='JPEG', quality=quality)
+        buffer.seek(0)
+        # Read image back from buffer
+        compressed_img = Image.open(buffer)
+        compressed_image = np.array(compressed_img)
+        return compressed_image
+    elif torch.is_tensor(image):
+        if image.shape[0] not in (1, 3):
+            image = image.permute(2, 0, 1)
+
+        # Convert to unit8 tensor
+        image_unit8 = (image * 255).clamp(0, 255).to(torch.uint8)
+        # Conpress image
+        encoded_jpeg = torchvision.io.encode_jpeg(image_unit8, quality=quality)
+        # Decode image
+        compressed_image = torchvision.io.decode_jpeg(encoded_jpeg).float() / 255
+        # Ensure the output has the same device and dtype as input
+        compressed_image = compressed_image.to(image.dtype).to(image.device).clamp(0.0, 1.0)
+        return compressed_image
+
+
+@check_is_image
 def thresholding(image, threshold_value=None, max_value=255, threshold_types: tuple = (cv2.THRESH_BINARY,)):
     """
     Currently only works for gray images.
@@ -406,8 +479,7 @@ def thresholding(image, threshold_value=None, max_value=255, threshold_types: tu
     _logger_ip.debug(f"Threshold value used: {threshold_value}")
     return thresholded_image
 
-
-@check_is_numpy_image
+@check_is_image
 def resize(image, dimensions, interpolation=cv2.INTER_LINEAR):
     """
     Resizes the given image to the given dimensions. If a single integer is passed,
@@ -419,15 +491,28 @@ def resize(image, dimensions, interpolation=cv2.INTER_LINEAR):
     return cv2.resize(image, dimensions, interpolation=interpolation)
 
 
-@check_is_numpy_image
+@check_is_image
 def sharpen(image, kernel=np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])):
     """
     Sharpens the given image using the given kernel.
     """
     return cv2.filter2D(image, -1, kernel)
 
+@check_is_image
+def plot_image(image: np.ndarray | torch.Tensor, title: str = None) -> None:
+    """
+    Plot the image with its file path and label.
+    If image shape of (3, width, height) is passed, it is converted to (width, height, 3) before plotting.
+    """
+    if image.shape[0] == 3:
+        image = np.transpose(image, (1, 2, 0))
+    plt.imshow(image)
+    plt.title(title)
+    plt.axis('off')
+    plt.show()
 
-@check_is_numpy_image
+
+@check_is_image
 def sift(image) -> [cv2.KeyPoint, np.ndarray]:
     """
     Extracts SIFT features from the given image.
@@ -443,7 +528,7 @@ def sift(image) -> [cv2.KeyPoint, np.ndarray]:
     return keypoints, descriptors
 
 
-@check_is_numpy_image
+@check_is_image
 def root_sift(image: np.ndarray,
               epsilon: float = 1e-7) -> tuple[cv2.KeyPoint, np.ndarray]:
     """
@@ -460,7 +545,7 @@ def root_sift(image: np.ndarray,
     return keypoints, descriptors
 
 
-@check_is_numpy_image
+@check_is_image
 def surf(image: np.ndarray) -> tuple[cv2.KeyPoint, np.ndarray]:
     """
     Extracts SURF features from the given image.
@@ -470,7 +555,7 @@ def surf(image: np.ndarray) -> tuple[cv2.KeyPoint, np.ndarray]:
     return keypoints, descriptors
 
 
-@check_is_numpy_image
+@check_is_image
 def difference_of_gaussian(image: np.ndarray,
                            num_intervals: int,
                            num_octaves: int = 1,
@@ -503,7 +588,7 @@ def difference_of_gaussian(image: np.ndarray,
         """)
 
         for _ in range(octave_range):
-            gaussian_images.append(gaussian_blurr(image, sigma=current_sigma))
+            gaussian_images.append(gaussian_blur(image, sigma=current_sigma))
             _logger_ife.debug(f"Sigma value used: {current_sigma}")
             current_sigma *= k
 
