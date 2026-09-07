@@ -91,6 +91,10 @@ image_store = InMemoryImageEmbeddingStore(
 ### Changed
 - Added backbones resnet34, resnet50, resnet101, resnet152 under
 `pyvisim.neural_networks.backbones`.
+- ⚠️ `HnswIndex` takes `graph_degree`, `build_candidates` and
+  `search_candidates` instead of `m`, `ef_construction` and `ef_search`, and
+  exposes them under those names. The old names are gone, in `index_params`
+  too, so a store saved by an earlier release cannot be loaded by this one.
 - Every `save_to_disk` rejects a destination whose directory does not exist
   with an `OSError`, and every `load_from_disk` reports a missing file as a
   `FileNotFoundError`. The embedders reported both as a safetensors error.

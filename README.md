@@ -90,7 +90,7 @@ image_store = InMemoryImageEmbeddingStore(
     image_paths=train_image_paths,
     embedder=embedder,
     search_index="hnsw",
-    index_params={"m": 16, "ef_construction": 200},
+    index_params={"graph_degree": 16, "build_candidates": 200},
 )
 
 candidates = image_store.retrieve_top_k_similar(image, k=5)[0] # returns a tuple of (image_path, similarity_score)

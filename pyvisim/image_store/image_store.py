@@ -30,12 +30,27 @@ from ..typing import (
     SearchIndex,
     UInt8NumpyArray,
 )
-from ._index import BruteForceIndex, ExternalSearchIndex, HnswIndex, Space
+from ._index import (
+    BRUTE_FORCE_TO_HNSWLIB,
+    HNSW_TO_HNSWLIB,
+    BruteForceIndex,
+    ExternalSearchIndex,
+    HnswIndex,
+    Space,
+    validate_index_params,
+)
 
 #: Value of ``search_index`` selecting the HNSW graph.
 _HNSW = "hnsw"
 #: Name under which a brute-force store records its index.
 _BRUTE_FORCE = "brute-force"
+
+#: Parameter table of each index the store can build, keyed by index name. It
+#: names the parameters the index takes and maps them onto the backend's own.
+_INDEX_PARAM_TABLES: dict[str, dict[str, str]] = {
+    _HNSW: HNSW_TO_HNSWLIB,
+    _BRUTE_FORCE: BRUTE_FORCE_TO_HNSWLIB,
+}
 
 #: On-disk format version, bumped if the safetensors layout ever changes.
 _STORE_FORMAT_VERSION = 2
@@ -118,7 +133,9 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
 
     :param index_params: Optional keyword parameters forwarded to the index
         constructor. The accepted parameters per index are listed under
-        :ref:`Index parameters <store-index-parameters>`.
+        :ref:`Index parameters <store-index-parameters>`; anything else is
+        rejected. ``space`` belongs to the store itself and is not accepted
+        here.
     :param skip_errors: If ``True``, images that cannot be read or embedded are
         skipped with a warning instead of aborting.
     :param num_workers: Threads reading the gallery image files while the
@@ -129,14 +146,19 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
         of holding more decoded images in memory. Ignored by an external index,
         which embeds nothing.
     :raises ValueError: If ``search_index`` is unknown, ``num_workers`` or
-        ``num_prefetch_batches`` is not positive, no image could be embedded, or
-        an external index does not hold one vector per path.
+        ``num_prefetch_batches`` is not positive, no image could be embedded,
+        an external index does not hold one vector per path, or ``index_params``
+        names a parameter the index does not take.
     :raises TypeError: If any provided path is not a string.
 
     .. _store-index-parameters:
 
     Index parameters
     ----------------
+
+    The parameters are named after what they do rather than after the library
+    implementing the index, so they stay the same if the backend behind an index
+    ever changes.
 
     ``HnswIndex`` parameters
     ~~~~~~~~~~~~~~~~~~~~~~~~
@@ -148,22 +170,19 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
        * - Parameter
          - Default
          - Meaning
-       * - ``space``
-         - ``"cosine"``
-         - Metric space, as above.
-       * - ``m``
+       * - ``graph_degree``
          - ``16``
          - Bidirectional links created per node. Higher values raise recall on
            high-dimensional data and cost memory.
-       * - ``ef_construction``
+       * - ``build_candidates``
          - ``200``
          - Size of the candidate list kept while building the graph. Higher
            values build a better graph, more slowly.
-       * - ``ef_search``
+       * - ``search_candidates``
          - ``50``
          - Size of the candidate list kept at query time. Higher values raise
-           recall and cost query time. A search for more than ``ef_search``
-           neighbours raises it to ``k``.
+           recall and cost query time. A search for more than
+           ``search_candidates`` neighbours raises it to ``k``.
        * - ``random_seed``
          - ``100``
          - Seed of the level generator, which decides the layer each vector is
@@ -183,9 +202,6 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
        * - Parameter
          - Default
          - Meaning
-       * - ``space``
-         - ``"cosine"``
-         - Metric space, as above.
        * - ``num_threads``
          - ``-1``
          - Threads used to run batched queries. ``-1`` uses every available
@@ -203,7 +219,7 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
     ...     embedder=embedder,
     ...     search_index="hnsw",
     ...     space="cosine",
-    ...     index_params={"m": 32, "ef_search": 100},
+    ...     index_params={"graph_degree": 32, "search_candidates": 100},
     ... )
     >>> # Save the store to disk and load it back later
     >>> store.save_to_disk("gallery.safetensors")
@@ -265,11 +281,15 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
             self._index_name = search_index.name
             return
 
+        self._index_name = _HNSW if search_index == _HNSW else _BRUTE_FORCE
+        # Checked before a single image is read: a misspelled parameter should
+        # not cost the caller a full embedding pass first.
+        _validate_index_params(self._index_name, self._index_params)
+
         paths, embeddings = _embed_image_paths(
             image_paths, embedder, skip_errors, num_workers, num_prefetch_batches
         )
         self._paths = paths
-        self._index_name = _HNSW if search_index == _HNSW else _BRUTE_FORCE
         # Only the index retains the gallery vectors; the local ``embeddings``
         # matrix is released once the index has copied it in.
         self._index = self._build_index(embeddings)
@@ -298,7 +318,7 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
             one over ``embeddings``.
         :return: A populated :class:`InMemoryImageEmbeddingStore`.
         :raises ValueError: If ``search_index`` does not hold one vector per
-            path.
+            path, or ``index_params`` names a parameter the index does not take.
         """
         store = cls.__new__(cls)
         store._embedder = embedder
@@ -311,6 +331,7 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
             return store
 
         store._index_name = index_name
+        _validate_index_params(index_name, store._index_params)
         store._index = store._build_index(
             np.ascontiguousarray(embeddings, dtype=np.float32)
         )
@@ -556,6 +577,20 @@ def _validate_search_index(search_index: str | ExternalSearchIndex | None) -> No
         f"Unknown search_index {search_index!r}. Pass {_HNSW!r} for an HNSW "
         f"graph, None for an exact brute-force scan, or an ExternalSearchIndex."
     )
+
+
+def _validate_index_params(index_name: str, index_params: dict[str, Any]) -> None:
+    """
+    Reject parameters the selected index does not take.
+
+    :param index_name: Name of the index the store builds.
+    :param index_params: The parameters the caller asked it to be built with.
+    :raises ValueError: If a parameter is not one the index accepts.
+    """
+    table = _INDEX_PARAM_TABLES.get(index_name)
+    if table is None:  # an external index brings its own parameters
+        return
+    validate_index_params(index_params, table, index_name)
 
 
 def _adopt_external_index(

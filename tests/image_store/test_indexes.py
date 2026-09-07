@@ -2,10 +2,17 @@
 
 from __future__ import annotations
 
+import inspect
+
 import numpy as np
 import pytest
 
 from pyvisim.image_store import BruteForceIndex, HnswIndex
+from pyvisim.image_store._index import (
+    BRUTE_FORCE_TO_HNSWLIB,
+    HNSW_TO_HNSWLIB,
+    accepted_index_params,
+)
 from pyvisim.image_store._index._bindings import _hnswlib
 
 
@@ -48,18 +55,66 @@ def test_reports_size_dim_and_space(vectors: np.ndarray) -> None:
 
 def test_repr_names_the_index(vectors: np.ndarray) -> None:
     """``repr`` names the index class and its configuration."""
-    assert "HnswIndex(" in repr(HnswIndex(vectors, m=8))
-    assert "m=8" in repr(HnswIndex(vectors, m=8))
+    assert "HnswIndex(" in repr(HnswIndex(vectors, graph_degree=8))
+    assert "graph_degree=8" in repr(HnswIndex(vectors, graph_degree=8))
     assert "BruteForceIndex(" in repr(BruteForceIndex(vectors))
 
 
 def test_hnsw_exposes_its_graph_parameters(vectors: np.ndarray) -> None:
     """The HNSW build and query parameters are readable after construction."""
-    index = HnswIndex(vectors, m=8, ef_construction=64, ef_search=17, random_seed=3)
+    index = HnswIndex(
+        vectors,
+        graph_degree=8,
+        build_candidates=64,
+        search_candidates=17,
+        random_seed=3,
+    )
+    assert index.graph_degree == 8
+    assert index.build_candidates == 64
+    assert index.search_candidates == 17
+    assert index.random_seed == 3
+
+
+def test_hnsw_params_reach_the_backend_under_its_own_names(
+    vectors: np.ndarray,
+) -> None:
+    """Each parameter drives the hnswlib keyword its table maps it onto."""
+    index = HnswIndex(vectors, graph_degree=8, build_candidates=64)
     assert index.M == 8
     assert index.ef_construction == 64
-    assert index.ef_search == 17
-    assert index.random_seed == 3
+    assert index.max_elements == vectors.shape[0]
+
+
+def test_hnsw_rejects_the_backends_own_parameter_names(vectors: np.ndarray) -> None:
+    """The hnswlib spellings are not accepted; only this library's names are."""
+    for name in ("m", "M", "ef", "ef_search", "max_elements"):
+        with pytest.raises(TypeError, match="unexpected keyword argument"):
+            HnswIndex(vectors, **{name: 8})
+
+
+# Parameter tables
+
+
+def test_tables_cover_every_constructor_parameter() -> None:
+    """No parameter an index takes is missing from its table."""
+    for index_cls, table in (
+        (HnswIndex, HNSW_TO_HNSWLIB),
+        (BruteForceIndex, BRUTE_FORCE_TO_HNSWLIB),
+    ):
+        taken = set(inspect.signature(index_cls.__init__).parameters)
+        assert taken - {"self", "vectors"} <= set(table)
+
+
+def test_accepted_params_exclude_the_ones_the_store_supplies() -> None:
+    """``space`` and ``capacity`` are set by the store, not by the caller."""
+    assert accepted_index_params(HNSW_TO_HNSWLIB) == (
+        "graph_degree",
+        "build_candidates",
+        "search_candidates",
+        "random_seed",
+        "num_threads",
+    )
+    assert accepted_index_params(BRUTE_FORCE_TO_HNSWLIB) == ("num_threads",)
 
 
 @pytest.mark.parametrize("space", ["cosine", "l2", "ip"])
@@ -160,12 +215,12 @@ def test_search_pads_a_gallery_smaller_than_k(vectors: np.ndarray) -> None:
 
 
 def test_hnsw_widens_its_walk_for_a_large_k(vectors: np.ndarray) -> None:
-    """A search asking for more neighbours than ``ef_search`` still returns k."""
-    index = HnswIndex(vectors, ef_search=2)
+    """A search asking for more neighbours than ``search_candidates`` returns k."""
+    index = HnswIndex(vectors, search_candidates=2)
     scores, ids = index.search(vectors[:1], k=20)
     assert ids.shape == (1, 20)
     assert (ids >= 0).all()
-    assert index.ef_search >= 20
+    assert index.search_candidates >= 20
 
 
 def test_scores_rank_the_closest_first(vectors: np.ndarray) -> None:
@@ -242,8 +297,11 @@ def test_update_keeps_the_dimensionality(vectors: np.ndarray, index_cls: type) -
 
 def test_update_keeps_the_hnsw_parameters(vectors: np.ndarray) -> None:
     """The rebuilt graph keeps the parameters it was configured with."""
-    index = HnswIndex(vectors, m=8, ef_construction=64, ef_search=17)
+    index = HnswIndex(
+        vectors, graph_degree=8, build_candidates=64, search_candidates=17
+    )
     index.update(vectors[:10])
-    assert index.M == 8
-    assert index.ef_construction == 64
-    assert index.ef_search == 17
+    assert index.graph_degree == 8
+    assert index.build_candidates == 64
+    assert index.search_candidates == 17
+    assert index.max_elements == 10

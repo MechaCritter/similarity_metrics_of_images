@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 
 from ...typing import Float32NumpyArray, FloatNumpyArray, IntNumpyArray
 from ._bindings import _hnswlib
+from ._params import HNSW_TO_HNSWLIB, as_backend_params
 from ._utils import (
     Space,
     as_decoded_gallery,
@@ -26,9 +27,9 @@ class HnswIndex(_hnswlib.Index):
 
     HNSW builds a multi-layer proximity graph over the gallery and walks it
     greedily at query time, which gives fast approximate search without a
-    training step. Recall is traded against speed through ``ef_construction``
-    (how thoroughly the graph is built) and ``ef_search`` (how wide the walk is
-    at query time).
+    training step. Recall is traded against speed through ``build_candidates``
+    (how thoroughly the graph is built) and ``search_candidates`` (how wide the
+    walk is at query time).
 
     The graph owns the gallery vectors: they are copied into it at construction
     time and read back on demand, so no second copy is held.
@@ -36,12 +37,12 @@ class HnswIndex(_hnswlib.Index):
     :param vectors: Gallery embedding vectors, shape ``(N, D)``.
     :param space: Metric space to build the graph for, ``"cosine"``, ``"l2"`` or
         ``"ip"``. In cosine space the vectors are stored L2-normalised.
-    :param m: Number of bidirectional links created per node. Higher values
-        improve recall on high-dimensional data at the cost of memory.
-    :param ef_construction: Size of the candidate list used while building the
+    :param graph_degree: Number of bidirectional links created per node. Higher
+        values improve recall on high-dimensional data at the cost of memory.
+    :param build_candidates: Size of the candidate list used while building the
         graph. Higher values build a better graph, more slowly.
-    :param ef_search: Size of the candidate list used at query time. It is
-        raised to ``k`` whenever a search asks for more neighbours than that.
+    :param search_candidates: Size of the candidate list used at query time. It
+        is raised to ``k`` whenever a search asks for more neighbours than that.
     :param random_seed: Seed of the level generator, which decides the layer
         each node is inserted at.
     :param num_threads: Threads used to build the graph and to run batched
@@ -55,9 +56,9 @@ class HnswIndex(_hnswlib.Index):
         vectors: FloatNumpyArray,
         *,
         space: Space = "cosine",
-        m: int = 16,
-        ef_construction: int = 200,
-        ef_search: int = 50,
+        graph_degree: int = 16,
+        build_candidates: int = 200,
+        search_candidates: int = 50,
         random_seed: int = 100,
         num_threads: int = -1,
     ) -> None:
@@ -65,17 +66,17 @@ class HnswIndex(_hnswlib.Index):
         gallery = as_gallery_matrix(vectors)
         super().__init__(space, gallery.shape[1])
 
-        self._m = int(m)
-        self._ef_construction = int(ef_construction)
-        self._random_seed = int(random_seed)
         self._num_vectors = int(gallery.shape[0])
-        self.init_index(
-            max_elements=self._num_vectors,
-            M=self._m,
-            ef_construction=self._ef_construction,
-            random_seed=self._random_seed,
-        )
-        self.ef = int(ef_search)
+        # Kept in this library's own vocabulary and translated on the way into
+        # the backend, which is also what a rebuild in 'update' replays.
+        self._build_params: dict[str, Any] = {
+            "capacity": self._num_vectors,
+            "graph_degree": int(graph_degree),
+            "build_candidates": int(build_candidates),
+            "random_seed": int(random_seed),
+        }
+        self.init_index(**as_backend_params(self._build_params, HNSW_TO_HNSWLIB))
+        self.ef = int(search_candidates)
         if is_explicit_thread_count(num_threads):
             self.set_num_threads(int(num_threads))
         self.add_items(gallery, np.arange(self._num_vectors))
@@ -93,14 +94,24 @@ class HnswIndex(_hnswlib.Index):
         return as_decoded_gallery(decoded)
 
     @property
-    def ef_search(self) -> int:
+    def graph_degree(self) -> int:
+        """Number of bidirectional links created per node."""
+        return int(self.M)
+
+    @property
+    def build_candidates(self) -> int:
+        """Size of the candidate list used while building the graph."""
+        return int(self.ef_construction)
+
+    @property
+    def search_candidates(self) -> int:
         """Size of the candidate list used at query time."""
         return int(self.ef)
 
     @property
     def random_seed(self) -> int:
         """Seed of the level generator used to build the graph."""
-        return self._random_seed
+        return int(self._build_params["random_seed"])
 
     def __len__(self) -> int:
         return self._num_vectors
@@ -108,8 +119,9 @@ class HnswIndex(_hnswlib.Index):
     def __repr__(self) -> str:
         return (
             f"{self.__class__.__name__}(num_vectors={len(self)}, dim={self.dim}, "
-            f"space={self.space!r}, m={self.M}, "
-            f"ef_construction={self.ef_construction}, ef_search={self.ef_search})"
+            f"space={self.space!r}, graph_degree={self.graph_degree}, "
+            f"build_candidates={self.build_candidates}, "
+            f"search_candidates={self.search_candidates})"
         )
 
     def search(
@@ -159,14 +171,10 @@ class HnswIndex(_hnswlib.Index):
                 f"New vectors have dimensionality {gallery.shape[1]}, but the "
                 f"index was built for {self.dim}."
             )
-        ef_search = self.ef
+        search_candidates = self.ef
         self._num_vectors = int(gallery.shape[0])
+        self._build_params["capacity"] = self._num_vectors
         self.reset_index()
-        self.init_index(
-            max_elements=self._num_vectors,
-            M=self._m,
-            ef_construction=self._ef_construction,
-            random_seed=self._random_seed,
-        )
-        self.ef = ef_search
+        self.init_index(**as_backend_params(self._build_params, HNSW_TO_HNSWLIB))
+        self.ef = search_candidates
         self.add_items(gallery, np.arange(self._num_vectors))

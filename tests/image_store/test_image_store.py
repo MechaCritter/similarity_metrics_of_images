@@ -82,7 +82,7 @@ def hnsw_store(
     :returns: a store backed by an approximate HNSW index.
     """
     return InMemoryImageEmbeddingStore(
-        gallery_paths, learned_vlad_embedder, "hnsw", index_params={"m": 8}
+        gallery_paths, learned_vlad_embedder, "hnsw", index_params={"graph_degree": 8}
     )
 
 
@@ -164,9 +164,9 @@ def test_hnsw_store_builds_a_graph_index(
 ) -> None:
     """``"hnsw"`` builds a graph index with the parameters it was given."""
     assert isinstance(hnsw_store.index, HnswIndex)
-    assert hnsw_store.index.M == 8
+    assert hnsw_store.index.graph_degree == 8
     assert hnsw_store.index_name == "hnsw"
-    assert hnsw_store.index_params == {"m": 8}
+    assert hnsw_store.index_params == {"graph_degree": 8}
 
 
 def test_embeddings_come_from_the_index(store: InMemoryImageEmbeddingStore) -> None:

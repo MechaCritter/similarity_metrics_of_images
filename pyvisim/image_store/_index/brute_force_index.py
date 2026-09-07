@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from typing import cast
+from typing import Any, cast
 
 import numpy as np
 
 from ...typing import Float32NumpyArray, FloatNumpyArray, IntNumpyArray
 from ._bindings import _hnswlib
+from ._params import BRUTE_FORCE_TO_HNSWLIB, as_backend_params
 from ._utils import (
     Space,
     as_decoded_gallery,
@@ -53,10 +54,16 @@ class BruteForceIndex(_hnswlib.BFIndex):
         super().__init__(space, gallery.shape[1])
 
         self._num_vectors = int(gallery.shape[0])
-        self.init_index(self._num_vectors)
+        self.init_index(**self._backend_build_params())
         if is_explicit_thread_count(num_threads):
             self.set_num_threads(int(num_threads))
         self.add_items(gallery, np.arange(self._num_vectors))
+
+    def _backend_build_params(self) -> dict[str, Any]:
+        """The build parameters of the current gallery, in backend keywords."""
+        return as_backend_params(
+            {"capacity": self._num_vectors}, BRUTE_FORCE_TO_HNSWLIB
+        )
 
     @property
     def vectors(self) -> Float32NumpyArray:
@@ -123,5 +130,5 @@ class BruteForceIndex(_hnswlib.BFIndex):
             )
         self._num_vectors = int(gallery.shape[0])
         self.reset_index()
-        self.init_index(self._num_vectors)
+        self.init_index(**self._backend_build_params())
         self.add_items(gallery, np.arange(self._num_vectors))
