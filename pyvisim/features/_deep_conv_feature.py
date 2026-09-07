@@ -82,6 +82,11 @@ class DeepConvFeature(FeatureExtractorBase):
         ``backbone`` (unless ``backbone`` is also given) and a
         :class:`FutureWarning` is emitted.
 
+    TODO
+    ====
+    - input range handling and batch processing; currently
+      one image is processed per call.
+
     References:
     ===========
     [1] Liangliang Wang and Deepu Rajan, "An Image Similarity Descriptor for Classification Tasks," J. Vis. Commun. Image R., vol. 71, pp. 102847, 2020.

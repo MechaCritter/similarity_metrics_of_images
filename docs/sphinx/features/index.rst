@@ -1,9 +1,7 @@
 Features
 ========
 
-.. include:: ../../features/README.md
-   :parser: myst_parser.sphinx_
-   :start-line: 1
+.. include:: intro.rst
 
 .. toctree::
    :maxdepth: 1
