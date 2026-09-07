@@ -13,3 +13,4 @@ Neural networks
    bce_siamese
    triplet
    clip
+   backbones

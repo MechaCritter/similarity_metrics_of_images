@@ -55,8 +55,10 @@ class DeepConvFeature(FeatureExtractorBase):
 
         * ``None`` (default): builds a torchvision VGG16 with ImageNet weights.
         * A string naming a built-in backbone, e.g. ``"vgg16"``, which builds
-          the torchvision model with its ImageNet weights. To list all
-          supported backbones, use:
+          the torchvision model with its ImageNet weights. Every supported
+          backbone is documented in
+          ``https://mechacritter.github.io/Python-Visual-Similarity/docs/sphinx/_build/html/neural_networks/backbones.html``.
+          To list them at runtime, use:
 
           .. code-block:: python
 

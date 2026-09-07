@@ -175,7 +175,8 @@ class BackboneWithHead(NeuralImageEmbedder):
 
     :param backbone: Name of the feature-extraction network, one of the
         ResNets :class:`ResNetBackbone` supports, e.g. ``"resnet18"`` (default)
-        or ``"resnet50"``.
+        or ``"resnet50"``. See
+        ``https://mechacritter.github.io/Python-Visual-Similarity/docs/sphinx/_build/html/neural_networks/backbones.html``.
     :param embedding_dim: Dimensionality of the projected embedding space.
     :param transform: processing transform applied to every input image. If
         ``None``, the preprocessing registered for the backbone is used. See
