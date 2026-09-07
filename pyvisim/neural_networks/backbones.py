@@ -26,22 +26,86 @@ with OptionalImport(package="torch", extra="nn") as _torch_import:
 _torch_import.check()
 
 
+#: Maps a backbone name to a builder of the corresponding torchvision model.
+#: The builder takes a ``pretrained`` flag: ``True`` loads torchvision's default
+#: (ImageNet) weights, ``False`` returns the bare architecture, so that trained
+#: weights can be loaded into it.
+_BACKBONE_BUILDERS: dict[str, Callable[[bool], "torch.nn.Module"]] = {
+    "resnet18": lambda pretrained: models.resnet18(
+        weights=models.ResNet18_Weights.DEFAULT if pretrained else None
+    ),
+    "resnet34": lambda pretrained: models.resnet34(
+        weights=models.ResNet34_Weights.DEFAULT if pretrained else None
+    ),
+    "resnet50": lambda pretrained: models.resnet50(
+        weights=models.ResNet50_Weights.DEFAULT if pretrained else None
+    ),
+    "resnet101": lambda pretrained: models.resnet101(
+        weights=models.ResNet101_Weights.DEFAULT if pretrained else None
+    ),
+    "resnet152": lambda pretrained: models.resnet152(
+        weights=models.ResNet152_Weights.DEFAULT if pretrained else None
+    ),
+    "vgg16": lambda pretrained: models.vgg16(
+        weights=models.VGG16_Weights.DEFAULT if pretrained else None
+    ),
+}
+
+
+def list_backbones() -> list[str]:
+    """
+    Lists the built-in backbones.
+
+    :return: The sorted names :func:`build_backbone` accepts.
+    """
+    return sorted(_BACKBONE_BUILDERS)
+
+
+def build_backbone(backbone: str, *, pretrained: bool = True) -> "torch.nn.Module":
+    """
+    Builds a built-in torchvision backbone.
+
+    :param backbone: A backbone name (see :func:`list_backbones`).
+    :param pretrained: Whether to load the default (ImageNet) weights.
+    :return: The requested torchvision model.
+    :raises ValueError: If no backbone is registered under ``backbone``.
+    """
+    builder = _BACKBONE_BUILDERS.get(backbone)
+    if builder is None:
+        raise ValueError(
+            f"Unknown backbone {backbone!r}. Supported backbones: {list_backbones()}."
+        )
+    return builder(pretrained)
+
+
 class ResNetBackbone(nn.Module):
     """
-    ResNet-18 backbone with its final fully-connected layer removed.
+    ResNet backbone with its final fully-connected layer removed.
 
     The classification head is stripped so the network outputs raw features;
-    ``output_dim`` reports their dimensionality (512 for ResNet-18).
+    ``output_dim`` reports their dimensionality (512 for ResNet-18 and
+    ResNet-34, 2048 for the deeper variants).
 
     :param pretrained: Whether to load the default ImageNet-pretrained weights.
+    :param variant: Name of the ResNet to build, e.g. ``"resnet18"`` (default)
+        or ``"resnet50"``.
+    :raises ValueError: If ``variant`` does not name a supported ResNet.
     """
 
-    def __init__(self, pretrained: bool = True) -> None:
+    supported_backbones: frozenset[str] = frozenset(
+        ["resnet18", "resnet34", "resnet50", "resnet101", "resnet152"]
+    )
+
+    def __init__(self, pretrained: bool = True, variant: str = "resnet18") -> None:
         super().__init__()
-        weights = models.ResNet18_Weights.DEFAULT if pretrained else None
-        base = models.resnet18(weights=weights)
+        if variant not in self.supported_backbones:
+            raise ValueError(
+                f"Unsupported backbone: {variant!r}. Supported backbones: "
+                f"{', '.join(repr(name) for name in self.supported_backbones)}."
+            )
+        base = build_backbone(variant, pretrained=pretrained)
         self.features = nn.Sequential(*list(base.children())[:-1])
-        self.output_dim = base.fc.in_features
+        self.output_dim = cast(nn.Linear, base.fc).in_features
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         """
@@ -54,9 +118,15 @@ class ResNetBackbone(nn.Module):
         return x.flatten(1)
 
 
-_TRANSFORM_REGISTRY: dict[str, Callable[[], "transforms.Compose"]] = {
-    # Source: https://docs.pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html
-    "resnet18": lambda: transforms.Compose(
+def _imagenet_transform() -> "transforms.Compose":
+    """
+    Builds the preprocessing the torchvision ResNets were trained with.
+
+    Source: https://docs.pytorch.org/vision/main/models/generated/torchvision.models.resnet18.html
+
+    :return: A fresh ImageNet preprocessing transform.
+    """
+    return transforms.Compose(
         [
             transforms.Resize(256),
             transforms.CenterCrop(224),
@@ -66,8 +136,7 @@ _TRANSFORM_REGISTRY: dict[str, Callable[[], "transforms.Compose"]] = {
                 std=[0.229, 0.224, 0.225],
             ),
         ]
-    ),
-}
+    )
 
 
 def get_transform(backbone: str) -> "transforms.Compose":
@@ -78,13 +147,16 @@ def get_transform(backbone: str) -> "transforms.Compose":
     :return: A fresh torchvision transform for that backbone.
     :raises ValueError: If no transform is registered for ``backbone``.
     """
-    if backbone not in _TRANSFORM_REGISTRY:
+    registry: dict[str, Callable[[], transforms.Compose]] = dict.fromkeys(
+        ResNetBackbone.supported_backbones, _imagenet_transform
+    )
+    if backbone not in registry:
         raise ValueError(
             f"Unsupported backbone: {backbone!r}; no preprocessing transform is "
             f"registered for it. Supported backbones: "
-            f"{', '.join(repr(name) for name in _TRANSFORM_REGISTRY)}."
+            f"{', '.join(repr(name) for name in registry)}."
         )
-    return _TRANSFORM_REGISTRY[backbone]()
+    return registry[backbone]()
 
 
 class BackboneWithHead(NeuralImageEmbedder):
@@ -101,7 +173,9 @@ class BackboneWithHead(NeuralImageEmbedder):
     is stateful and hence not JSON-safe. Upon deserialization, if the transform does
     not match the one the network was built with, a warning is issued.
 
-    :param backbone: name of feature-extraction network.
+    :param backbone: Name of the feature-extraction network, one of the
+        ResNets :class:`ResNetBackbone` supports, e.g. ``"resnet18"`` (default)
+        or ``"resnet50"``.
     :param embedding_dim: Dimensionality of the projected embedding space.
     :param transform: processing transform applied to every input image. If
         ``None``, the preprocessing registered for the backbone is used. See
@@ -196,20 +270,8 @@ class BackboneWithHead(NeuralImageEmbedder):
 
     @staticmethod
     def _get_backbone(backbone: str, pretrained: bool) -> torch.nn.Module:
-        """
-        Returns the backbone network corresponding to the given name.
-
-        :param backbone: Name of the backbone network.
-        :param pretrained: Whether to use a pretrained backbone.
-        :return: A PyTorch module implementing the backbone.
-        :raises ValueError: If ``backbone`` is not recognized.
-        """
-        if backbone == "resnet18":
-            return ResNetBackbone(pretrained=pretrained)
-        else:
-            raise ValueError(
-                f"Unsupported backbone: {backbone!r}. Supported backbones: 'resnet18'."
-            )
+        """Returns the backbone network corresponding to the given name."""
+        return ResNetBackbone(pretrained=pretrained, variant=backbone)
 
     def _preprocess(
         self,

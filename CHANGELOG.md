@@ -89,6 +89,8 @@ image_store = InMemoryImageEmbeddingStore(
   the channel count of the selected conv layer.
 
 ### Changed
+- Added backbones resnet34, resnet50, resnet101, resnet152 under
+`pyvisim.neural_networks.backbones`.
 - Every `save_to_disk` rejects a destination whose directory does not exist
   with an `OSError`, and every `load_from_disk` reports a missing file as a
   `FileNotFoundError`. The embedders reported both as a safetensors error.

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import warnings
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from typing import Any, cast
 
 from .._base_classes import FeatureExtractorBase
@@ -13,94 +13,33 @@ from ._utils import _check_output_shape, _to_single_image
 with OptionalImport(package="torch", extra="nn") as _torch_import:
     import torch
     from torchvision import transforms
-    from torchvision.models import VGG16_Weights, vgg16
 
-    from ..utils.torch_utils import decode_state_dict, encode_state_dict
+    from ..neural_networks.backbones import build_backbone
+    from ..utils.torch_utils import resolve_device
 
 setup_logging()
 
-
-def _resolve_device(device: str | None) -> str:
-    """
-    Resolve a requested device, auto-selecting CUDA when available.
-
-    :param device: ``"cuda"``, ``"cpu"`` or ``None`` to auto-select.
-    :return: The chosen device string. ``None`` becomes ``"cuda"`` when a CUDA
-        device is available, otherwise ``"cpu"``.
-    """
-    if device is None:
-        return "cuda" if torch.cuda.is_available() else "cpu"
-    return device
+#: Backbone built when none is given.
+_DEFAULT_BACKBONE = "vgg16"
 
 
-#: Maps a backbone identifier to a builder. The builder takes a ``pretrained``
-#: flag: ``True`` loads torchvision's default (ImageNet) weights, ``False``
-#: returns the bare architecture so embedded weights can be loaded into it.
-#:
-#: Each backbone is registered under two identifiers so a single map serves both
-#: lookups: the friendly name users pass via ``backbone`` (e.g. ``"vgg16"``) and
-#: the model class name serialization recovers from a model instance
-#: (``type(model).__name__``, e.g. ``"VGG"``). Currently only VGG16 is supported.
-_BACKBONE_BUILDERS: dict[str, Callable[[bool], torch.nn.Module]] = {
-    "vgg16": lambda pretrained: vgg16(
-        weights=VGG16_Weights.DEFAULT if pretrained else None
-    ),
-}
-_BACKBONE_BUILDERS["VGG"] = _BACKBONE_BUILDERS["vgg16"]
-
-
-def _build_backbone(
+def _resolve_backbone(
     backbone: str | torch.nn.Module | None,
-) -> tuple[torch.nn.Module, bool]:
-    """
-    Resolve a ``backbone`` argument into a concrete model.
+) -> tuple[torch.nn.Module, str | None]:
+    """Resolve a ``backbone`` argument into a ``(model, backbone name)`` pair.
 
-    :param backbone: ``None`` for the default VGG16, a string naming a built-in
-        backbone (see :data:`_BACKBONE_BUILDERS`), or a ``torch.nn.Module``.
-    :return: A ``(model, is_default_model)`` tuple. ``is_default_model`` is
-        ``True`` when the model can be rebuilt from torchvision's default
-        weights on load (``None`` or a built-in name) and ``False`` for a
-        user-supplied module whose weights must be embedded when serialising.
-    :raises ValueError: If ``backbone`` is an unknown built-in name.
-    :raises TypeError: If ``backbone`` is neither ``None``, a string, nor a
-        ``torch.nn.Module``.
+    The name is the built-in backbone the model was built from, which is all
+    serialization needs to rebuild it, and ``None`` for a user-supplied module.
     """
-    if backbone is None:
-        return _BACKBONE_BUILDERS["vgg16"](True), True
-    if isinstance(backbone, str):
-        builder = _BACKBONE_BUILDERS.get(backbone.lower())
-        if builder is None:
-            # Only the friendly, lowercase names are public; the class-name
-            # aliases exist purely for serialization round-trips.
-            raise ValueError(
-                f"Unknown backbone {backbone!r}. Supported backbones: "
-                f"{sorted(name for name in _BACKBONE_BUILDERS if name.islower())}."
-            )
-        return builder(True), True
-    if isinstance(backbone, torch.nn.Module):
-        return backbone, False
+    final_backbone = _DEFAULT_BACKBONE if backbone is None else backbone
+    if isinstance(final_backbone, str):
+        return build_backbone(final_backbone), final_backbone
+    if isinstance(final_backbone, torch.nn.Module):
+        return final_backbone, None
     raise TypeError(
         "backbone must be None, a string naming a built-in backbone, or a "
-        f"torch.nn.Module. Got {type(backbone)} instead."
+        f"torch.nn.Module. Got {type(final_backbone)} instead."
     )
-
-
-def _build_torchvision_model(arch: str, *, pretrained: bool) -> torch.nn.Module:
-    """
-    Rebuild a torchvision model from its architecture name.
-
-    :param arch: Model architecture name (e.g. ``"VGG"``).
-    :param pretrained: Whether to load the default (ImageNet) weights.
-    :return: The reconstructed model.
-    :raises ValueError: If the architecture is not known.
-    """
-    builder = _BACKBONE_BUILDERS.get(arch)
-    if builder is None:
-        raise ValueError(
-            f"Cannot automatically rebuild model architecture {arch!r}. "
-            "Provide 'feature_extractor' explicitly when loading."
-        )
-    return builder(pretrained)
 
 
 class DeepConvFeature(FeatureExtractorBase):
@@ -115,8 +54,16 @@ class DeepConvFeature(FeatureExtractorBase):
     :param backbone: The convolutional backbone to extract features from. It may be:
 
         * ``None`` (default): builds a torchvision VGG16 with ImageNet weights.
-        * A string naming a built-in backbone. Currently only ``"vgg16"`` is
-          supported, which builds a torchvision VGG16 with ImageNet weights.
+        * A string naming a built-in backbone, e.g. ``"vgg16"``, which builds
+          the torchvision model with its ImageNet weights. To list all
+          supported backbones, use:
+
+          .. code-block:: python
+
+             from pyvisim.neural_networks.backbones import list_backbones
+
+             list_backbones()
+
         * A ``torch.nn.Module`` instance: any user-supplied PyTorch model.
 
         In the paper [1], a VGG-Face model trained on the Imdb-Wiki dataset was
@@ -154,15 +101,14 @@ class DeepConvFeature(FeatureExtractorBase):
         super().__init__()
         _torch_import.check()
         backbone = self._resolve_deprecated_model(backbone, kwargs)
-        # Track whether a rebuildable (torchvision-default) model is used: when
-        # serialising, such a model is rebuilt from torchvision on load (no
-        # weights stored), while a user-supplied model has its state_dict
-        # embedded in the embedder file.
-        model, self._is_default_model = _build_backbone(backbone)
+        # Track which built-in backbone is used, if any: serialising stores its
+        # name and rebuilds it from torchvision on load, while a user-supplied
+        # model has no name to rebuild it from.
+        model, self._backbone_name = _resolve_backbone(backbone)
         self._model: torch.nn.Module
         self._target_submodule = target_submodule
         self.layer_index = layer_index
-        self.device = _resolve_device(device)
+        self.device = resolve_device(device)
         self.transform = transform
         if self.transform is None:
             self.transform = transforms.Compose(
@@ -240,59 +186,48 @@ class DeepConvFeature(FeatureExtractorBase):
         """
         Return the configuration needed to rebuild this deep feature extractor.
 
-        When the default model is used (``model=None`` at construction), only
-        its architecture name is stored and the model is rebuilt from
-        torchvision's default weights on load. When a user-supplied model is
-        used, its full ``state_dict`` is embedded (as array nodes that the
-        embedder serializer writes as binary tensors) so the trained weights
-        are recovered exactly. The custom ``transform`` is not serialised; the
-        default transform is used when reconstructing.
+        Only the name of the built-in backbone is stored, and the model is
+        rebuilt from torchvision's default weights on load. A user-supplied
+        model has no such name, and is stored as ``None``. The custom
+        ``transform`` is not serialised; the default transform is used when
+        reconstructing.
 
-        :return: A mapping of constructor arguments. It may contain embedded
-            array nodes (the model ``state_dict``) which the embedder serializer
-            extracts into the ``.embedder`` file's tensors.
+        :return: A mapping of constructor arguments.
         """
-        config: dict[str, Any] = {
-            "model_arch": type(self._model).__name__,
-            "default_model": self._is_default_model,
+        return {
+            "backbone": self._backbone_name,
             "target_submodule": self._target_submodule,
             "layer_index": self.layer_index,
             "device": self.device,
         }
-        if not self._is_default_model:
-            config["state_dict"] = encode_state_dict(self._model)
-        return config
 
     @classmethod
     def _from_config(cls, config: dict[str, Any]) -> DeepConvFeature:
         """
         Rebuild a :class:`DeepConvFeature` from a serialised configuration.
 
-        For a default model the architecture is rebuilt from torchvision's
-        default weights. For a user-supplied model the architecture skeleton is
-        rebuilt and the embedded ``state_dict`` is loaded into it, recovering
-        the trained weights exactly.
+        The backbone is rebuilt by name, so the reconstructed extractor can be
+        serialised again in turn.
 
         :param config: Mapping produced by :meth:`_serialization_config`.
         :return: A reconstructed deep feature extractor.
-        :raises ValueError: If the stored model architecture is not known and
-            cannot be rebuilt automatically.
+        :raises ValueError: If the extractor was built on a user-supplied model,
+            or on a backbone this release no longer knows.
         :raises ImportError: If the optional torch dependency is not installed.
         """
         _torch_import.check()
-        arch = config["model_arch"]
-        default_model = config.get("default_model", True)
-        device = config.get("device", "cpu")
-        if device == "cuda" and not torch.cuda.is_available():
-            device = "cpu"
-        model = _build_torchvision_model(arch, pretrained=default_model)
-        if not default_model:
-            model.load_state_dict(decode_state_dict(config["state_dict"]))
+        backbone = config.get("backbone")
+        if backbone is None:
+            raise ValueError(
+                "Cannot automatically rebuild a DeepConvFeature built on a "
+                "user-supplied model. Provide 'feature_extractor' explicitly "
+                "when loading."
+            )
         return cls(
-            backbone=model,
+            backbone=backbone,
             target_submodule=config.get("target_submodule"),
             layer_index=config["layer_index"],
-            device=device,
+            device=resolve_device(config.get("device", "cpu")),
         )
 
     @property
