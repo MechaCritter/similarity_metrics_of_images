@@ -27,7 +27,9 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store"]
+# 'intro.rst' files are fragments pulled into the section index via
+# '.. include::', so they must not be built as standalone documents.
+exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/intro.rst"]
 
 language = "en"
 

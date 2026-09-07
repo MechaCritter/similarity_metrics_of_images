@@ -26,8 +26,7 @@ import sys
 from platformdirs import user_cache_dir
 
 from pyvisim.datasets import OxfordFlowerDataset
-from pyvisim.features import DeepConvFeature
-from pyvisim.neural_networks.siamese import ResNetBackbone
+from pyvisim.neural_networks.backbones import build_backbone, list_backbones
 
 
 def cache_dir() -> str:
@@ -45,10 +44,9 @@ def prefetch_dataset() -> None:
 
 
 def prefetch_backbones() -> None:
-    report("Prefetching the ResNet-18 ImageNet weights")
-    ResNetBackbone(pretrained=True)
-    report("Prefetching the VGG16 ImageNet weights")
-    DeepConvFeature(backbone="vgg16", device="cpu")
+    for backbone in list_backbones():
+        report(f"Prefetching the {backbone} ImageNet weights")
+        build_backbone(backbone, pretrained=True)
     report("Backbone weights ready")
 
 

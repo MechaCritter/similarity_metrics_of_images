@@ -89,6 +89,8 @@ image_store = InMemoryImageEmbeddingStore(
   the channel count of the selected conv layer.
 
 ### Changed
+- Added backbones resnet34, resnet50, resnet101, resnet152 under
+`pyvisim.neural_networks.backbones`.
 - ⚠️ `HnswIndex` takes `graph_degree`, `build_candidates` and
   `search_candidates` instead of `m`, `ef_construction` and `ef_search`, and
   exposes them under those names. The old names are gone, in `index_params`
