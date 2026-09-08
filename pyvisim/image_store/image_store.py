@@ -13,7 +13,7 @@ import warnings
 from collections import deque
 from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any, ClassVar, NamedTuple
+from typing import Any, ClassVar
 
 import numpy as np
 from PIL import Image, UnidentifiedImageError
@@ -42,6 +42,7 @@ from ._index import (
     Space,
     validate_index_params,
 )
+from .candidate import Candidate
 
 #: Value of ``search_index`` selecting the HNSW graph.
 _HNSW = "hnsw"
@@ -69,18 +70,6 @@ _SEARCH_INDEX_KWARG = "search_index"
 _DEFAULT_NUM_WORKERS = 4
 #: Batches the decoding threads may run ahead of the embedder.
 _DEFAULT_NUM_PREFETCH_BATCHES = 4
-
-
-class Candidate(NamedTuple):
-    """A single retrieval result.
-
-    :param path: Path of the matched gallery image.
-    :param score: Score the index ranked the match by, best first. For the
-        built-in indexes it is a distance, so lower means more similar.
-    """
-
-    path: str
-    score: float
 
 
 class InMemoryImageEmbeddingStore(SerializerMixin):
