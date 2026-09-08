@@ -472,11 +472,12 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
         is off by default.
 
         The expansion is defined on L2-normalised embeddings ranked by cosine
-        similarity, which every embedder of this library produces by default.
-        The weights are computed on L2-normalised copies of the vectors
-        whatever ``space`` the store was built in, so a gallery of
+        similarity. The weights are computed on L2-normalised copies of the
+        vectors whatever ``space`` the store was built in, so a gallery of
         non-normalised embeddings searched in ``"l2"`` or ``"ip"`` space is
         averaged as if it were normalised.
+
+        According to [1], enabling **query expansion** improved mAP substantially.
 
         :param query_images: A single image or a batch/iterable of images to use
             as queries. Anything accepted by the store's embedder is valid.
