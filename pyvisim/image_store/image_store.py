@@ -6,10 +6,12 @@ from __future__ import annotations
 
 import functools
 import itertools
+import math
+import numbers
 import pathlib
 import warnings
 from collections import deque
-from collections.abc import Callable, Iterable, Iterator
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, ClassVar, NamedTuple
 
@@ -24,6 +26,7 @@ from ..serialization import (
 from ..typing import (
     Embedder,
     Float32NumpyArray,
+    Float64NumpyArray,
     FloatNumpyArray,
     ImageInput,
     IntNumpyArray,
@@ -230,6 +233,11 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
     >>>
     >>> for candidate in results:
     ...     print(candidate.path, candidate.score)
+    >>>
+    >>> # Refine the query with its own neighbourhood first (alpha query expansion)
+    >>> results = store.retrieve_top_k_similar(
+    ...     query_image, k=5, query_expansion=True, expansion_alpha=3.0
+    ... )[0]
     """
 
     _FILE_SUFFIX: ClassVar[str] = _STORE_FILE_SUFFIX
@@ -353,6 +361,39 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
         """The ``(N, D)`` gallery embedding matrix, read back from the index."""
         return self._index.vectors
 
+    @functools.cached_property
+    def _row_by_path(self) -> dict[str, int]:
+        """Gallery row number of every path, built on first use."""
+        return {path: row for row, path in enumerate(self._paths)}
+
+    def embeddings_of(self, paths: Sequence[str]) -> Float32NumpyArray:
+        """
+        Read the embeddings of the given gallery images back from the index.
+
+        Only the requested rows are decoded, so looking a few images up this
+        way is far cheaper than slicing :attr:`embeddings`, whose every access
+        decodes the whole gallery.
+
+        :param paths: Gallery image paths, at least one, in the order their
+            rows are wanted in.
+        :return: The ``(len(paths), D)`` block of their embeddings, read-only.
+            In cosine space they come back L2-normalised, the form they were
+            indexed in.
+        :raises ValueError: If no path is given or a path is not in the
+            gallery.
+        """
+        if len(paths) == 0:
+            raise ValueError("'paths' must name at least one gallery image, got none.")
+        rows = self._row_by_path
+        missing = [path for path in paths if path not in rows]
+        if missing:
+            raise ValueError(
+                f"{len(missing)} path(s) are not in the gallery, e.g. {missing[0]!r}."
+            )
+        return self._index.vectors_at(
+            np.asarray([rows[path] for path in paths], dtype=np.intp)
+        )
+
     @property
     def embedder(self) -> Embedder:
         """The embedder used to build the gallery and to embed queries."""
@@ -415,6 +456,10 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
         self,
         query_images: ImageInput,
         k: int = 5,
+        *,
+        query_expansion: bool = False,
+        expansion_alpha: float = 3.0,
+        expansion_neighbours: int = 50,
     ) -> list[list[Candidate]]:
         """
         Return the top-k most similar gallery images for each query image.
@@ -422,12 +467,52 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
         The query images are embedded with this store's embedder and matched
         against the gallery through its index.
 
+        With ``query_expansion`` on, every query is refined by the
+        alpha-weighted query expansion (αQE) of Radenović et al. [1] before the
+        final search: the query is searched once, the embeddings of the
+        ``expansion_neighbours`` best matches are read back from the index, and
+        the query is replaced by the L2-normalised weighted average of itself
+        and those matches, each match weighted by its cosine similarity to the
+        query raised to ``expansion_alpha``. A match whose similarity is not
+        positive weighs nothing. The results are thereby pulled towards the
+        whole neighbourhood the query belongs to rather than the single point
+        that was embedded. ``expansion_alpha=0`` weights every match that
+        resembles the query alike, which is the classic average query expansion
+        (AQE). The expansion costs one extra index search per query plus the
+        decoding of ``expansion_neighbours`` gallery vectors, which is why it
+        is off by default.
+
+        The expansion is defined on L2-normalised embeddings ranked by cosine
+        similarity, which every embedder of this library produces by default.
+        The weights are computed on L2-normalised copies of the vectors
+        whatever ``space`` the store was built in, so a gallery of
+        non-normalised embeddings searched in ``"l2"`` or ``"ip"`` space is
+        averaged as if it were normalised.
+
         :param query_images: A single image or a batch/iterable of images to use
             as queries. Anything accepted by the store's embedder is valid.
         :param k: Number of top similar gallery images to return per query.
+        :param query_expansion: Whether to refine every query with the alpha
+            query expansion before the final search.
+        :param expansion_alpha: Exponent applied to the cosine similarity of
+            each match to weight it in the expanded query. ``0`` weights every
+            match with a positive similarity alike. Defaults to ``3`` as in
+            [1].
+        :param expansion_neighbours: Number of top-ranked gallery images
+            averaged into the expanded query. Defaults to ``50`` as in [1].
         :return: One ranked list of :class:`Candidate` matches per query image,
             in the same order as ``query_images``.
+        :raises ValueError: If ``expansion_alpha`` is not a finite non-negative
+            number or ``expansion_neighbours`` is not a positive integer.
+
+        References:
+        ===========
+        [1] F. Radenović, G. Tolias, and O. Chum, "Fine-tuning CNN Image
+            Retrieval with No Human Annotation," IEEE Transactions on Pattern
+            Analysis and Machine Intelligence, vol. 41, no. 7, pp. 1655-1668,
+            2019.
         """
+        _validate_expansion_params(expansion_alpha, expansion_neighbours)
         # ``embedder.embed`` returns one row per query image, in input order, so
         # the whole batch is searched at once: an index answers one ``(M, D)``
         # matrix far faster than a per-query loop.
@@ -436,8 +521,65 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
             query_matrix = query_matrix.reshape(1, -1)
         if query_matrix.shape[0] == 0:
             return []
+        if query_expansion:
+            query_matrix = self._expanded_queries(
+                query_matrix, expansion_alpha, expansion_neighbours
+            )
 
         scores, ids = self.search(query_matrix, k)
+        return self._ranked_candidates(scores, ids)
+
+    def _expanded_queries(
+        self,
+        queries: FloatNumpyArray,
+        alpha: float,
+        num_neighbours: int,
+    ) -> Float32NumpyArray:
+        """
+        Replace every query embedding by its alpha-weighted query expansion.
+
+        Each query is searched once, the embeddings of its ``num_neighbours``
+        best matches are read back from the index, and the expansion is formed
+        from them by :func:`_alpha_query_expansion`.
+
+        :param queries: The ``(M, D)`` query embeddings.
+        :param alpha: Exponent of the similarity weights.
+        :param num_neighbours: Top-ranked gallery images averaged into each
+            query.
+        :return: The ``(M, D)`` expanded queries, each L2-normalised.
+        """
+        _, ids = self.search(queries, num_neighbours)
+        # A gallery smaller than ``num_neighbours`` pads the free columns with
+        # the id -1, which names no vector and is left out of the average. An
+        # external index may even report no neighbour at all for a query, and
+        # that query is then averaged with nothing, which leaves it as it is.
+        found = ids >= 0
+        neighbours = (
+            self._index.vectors_at(ids[found])
+            if found.any()
+            else np.empty((0, queries.shape[1]), dtype=np.float32)
+        )
+        blocks = np.split(neighbours, np.cumsum(found.sum(axis=1))[:-1])
+        return np.vstack(
+            [
+                _alpha_query_expansion(query, block, alpha)
+                for query, block in zip(queries, blocks, strict=True)
+            ]
+        )
+
+    def _ranked_candidates(
+        self,
+        scores: Float32NumpyArray,
+        ids: IntNumpyArray,
+    ) -> list[list[Candidate]]:
+        """
+        Turn the result block of a search into one ranked list per query.
+
+        :param scores: The ``(M, k)`` scores a search returned.
+        :param ids: The ``(M, k)`` gallery row numbers a search returned, with
+            ``-1`` marking a missing neighbour.
+        :return: One ranked list of :class:`Candidate` matches per query.
+        """
         return [
             [
                 Candidate(self._paths[int(image_id)], float(score))
@@ -565,6 +707,99 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
             else _validated_vectors(vectors, len(self._paths))
         )
         return self._write_state(self._state(embeddings), path)
+
+
+def _validate_expansion_params(alpha: float, num_neighbours: int) -> None:
+    """
+    Reject query expansion parameters the expansion cannot run with.
+
+    :param alpha: Exponent of the similarity weights.
+    :param num_neighbours: Top-ranked gallery images averaged into a query.
+    :raises ValueError: If ``alpha`` is not a finite non-negative number or
+        ``num_neighbours`` is not a positive integer.
+    """
+    if (
+        isinstance(alpha, bool)
+        or not isinstance(alpha, numbers.Real)
+        or not math.isfinite(alpha)
+        or alpha < 0
+    ):
+        raise ValueError(
+            f"'expansion_alpha' must be a finite non-negative number, got {alpha!r}."
+        )
+    if (
+        isinstance(num_neighbours, bool)
+        or not isinstance(num_neighbours, numbers.Integral)
+        or num_neighbours < 1
+    ):
+        raise ValueError(
+            f"'expansion_neighbours' must be a positive integer, got "
+            f"{num_neighbours!r}."
+        )
+
+
+def _unit_rows(matrix: FloatNumpyArray) -> Float64NumpyArray:
+    """
+    L2-normalise every row of a matrix, leaving all-zero rows as they are.
+
+    :param matrix: A ``(N, D)`` matrix.
+    :return: The matrix with unit-length rows, as float64.
+    """
+    rows = np.asarray(matrix, dtype=np.float64)
+    norms = np.linalg.norm(rows, axis=1, keepdims=True)
+    norms[norms == 0.0] = 1.0
+    result: Float64NumpyArray = rows / norms
+    return result
+
+
+def _alpha_query_expansion(
+    query: FloatNumpyArray,
+    neighbours: FloatNumpyArray,
+    alpha: float,
+) -> Float32NumpyArray:
+    """
+    Form the alpha-weighted query expansion (αQE) of one query.
+
+    Implements Section 3.5 of Radenović et al. [1]: the new query is the
+    weighted average of the query and its top-ranked gallery descriptors, where
+    the weight of the i-th ranked descriptor is its inner product with the query
+    raised to ``alpha``. A descriptor whose inner product is not positive
+    weighs nothing, whatever ``alpha``. With ``alpha=0`` every remaining
+    descriptor weighs the same and the expansion is the plain average query
+    expansion (AQE).
+
+    :param query: The ``(D,)`` query embedding.
+    :param neighbours: The ``(n, D)`` embeddings of its top-ranked gallery
+        images.
+    :param alpha: Exponent of the similarity weights.
+    :return: The expanded query, an L2-normalised ``(D,)`` float32 vector.
+
+    References:
+    ===========
+    [1] F. Radenović, G. Tolias, and O. Chum, "Fine-tuning CNN Image Retrieval
+        with No Human Annotation," IEEE Transactions on Pattern Analysis and
+        Machine Intelligence, vol. 41, no. 7, pp. 1655-1668, 2019.
+    """
+    # The paper works on L2-normalised descriptors, whose inner product is the
+    # cosine similarity. The normalised copies make that hold whatever form the
+    # store indexed the vectors in.
+    unit_query = _unit_rows(np.reshape(query, (1, -1)))[0]
+    unit_neighbours = _unit_rows(neighbours)
+    # Weight of the i-th ranked image: (f(q)^T f(i))^alpha. Only a positive
+    # similarity earns a weight: a dissimilar image contributes nothing, which
+    # keeps the weight real for a non-integer alpha, never pushes the query
+    # away along a direction unrelated to it, and leaves alpha=0 as the plain
+    # average of the images that do resemble the query.
+    similarities = unit_neighbours @ unit_query
+    positive = similarities > 0.0
+    weights = np.zeros_like(similarities)
+    weights[positive] = similarities[positive] ** alpha
+    # The query joins the average with the weight of its own similarity,
+    # (f(q)^T f(q))^alpha = 1. Dividing by the total weight would not change
+    # the direction, so the sum goes straight to the normalisation.
+    expanded = unit_query + weights @ unit_neighbours
+    unit_expanded = _unit_rows(np.reshape(expanded, (1, -1)))[0]
+    return np.asarray(unit_expanded, dtype=np.float32)
 
 
 def _validate_search_index(search_index: str | ExternalSearchIndex | None) -> None:

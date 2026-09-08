@@ -53,8 +53,8 @@ There's a matching `EmbeddingStore` protocol too (the gallery surface that retri
 evaluation rely on: `paths`, `embeddings`, `embedder`, and `search`).
 `InMemoryImageEmbeddingStore` satisfies it structurally, so `top_k_map` and
 `top_k_accuracy` stay decoupled from the concrete store. `SearchIndex` describes the
-other half, what a store searches through: the `vectors` an index owns, its `dim`, and
-its own `search`.
+other half, what a store searches through: the `vectors` an index owns, its `dim`,
+`vectors_at` to read a few of those vectors back by row number, and its own `search`.
 
 ## The `dims` string
 
