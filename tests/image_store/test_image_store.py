@@ -255,6 +255,17 @@ def test_retrieve_recovers_self(
     assert results[0][0].path == gallery_paths[2]
 
 
+def test_retrieved_candidate_reads_its_gallery_image(
+    store: InMemoryImageEmbeddingStore,
+    category_train_images_flat: list[np.ndarray],
+) -> None:
+    """The ``array`` of a match is the gallery image the store indexed."""
+    gray = category_train_images_flat[2]
+    probe = np.stack([gray, gray, gray], axis=-1)
+    best = store.retrieve_top_k_similar(probe, k=1)[0][0]
+    assert np.array_equal(best.array, probe)
+
+
 def test_retrieve_ranks_every_query(
     store: InMemoryImageEmbeddingStore,
     category_train_images_flat: list[np.ndarray],

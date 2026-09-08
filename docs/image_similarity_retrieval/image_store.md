@@ -5,13 +5,19 @@
 `retrieve_top_k_similar` embeds the query images with the store's embedder and
 ranks the gallery through the index. One ranked list of `Candidate` matches
 comes back per query image. Each candidate carries the `path` of the gallery
-image and the `score` it was ranked by, which is a distance for the built-in
-indexes, so lower means more similar.
+image, the `score` it was ranked by, which is a distance for the built-in
+indexes, so lower means more similar, and `array`, the matched image itself as
+an RGB `uint8` array. The image is read from `path` the first time `array` is
+accessed and kept from then on, which saves memory. `clear_buffer()` drops the
+kept image again.
 
 ```python
 candidates = store.retrieve_top_k_similar(query_image, k=5)[0]
 for candidate in candidates:
     print(candidate.path, candidate.score)
+
+best_match = candidates[0].array   # (H, W, 3) uint8, read from disk now
+candidates[0].clear_buffer()       # forget it again
 ```
 
 ### Query expansion
