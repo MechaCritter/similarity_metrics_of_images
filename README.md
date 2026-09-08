@@ -98,6 +98,17 @@ for candidate in candidates:
     print(candidate.path, candidate.score)
 ```
 
+The `alpha query expansion` and the `k-reciprocal re-ranking`can additionally be used to refine
+the retrieval results, improving `mean Average Precision` (see the
+[documentation](https://mechacritter.github.io/Python-Visual-Similarity/image_retrieval/reranking.html)):
+
+```python
+from pyvisim.image_store import KReciprocalReranker
+
+pool = image_store.retrieve_top_k_similar(image, k=100, query_expansion=True)[0]
+best = KReciprocalReranker(image_store).rerank(pool, top_k=5)
+```
+
 For more examples, please refer to the [`pyvisim` Examples
 Repository](https://github.com/MechaCritter/Python-Visual-Similarity-Examples).
 
