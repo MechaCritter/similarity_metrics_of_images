@@ -11,3 +11,4 @@ Image Similarity Retrieval
 
    image_store
    external_search_index
+   reranking

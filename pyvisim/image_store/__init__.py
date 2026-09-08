@@ -3,6 +3,7 @@
 from ._index import BruteForceIndex, ExternalSearchIndex, HnswIndex
 from .candidate import Candidate
 from .image_store import InMemoryImageEmbeddingStore
+from .reranking import KReciprocalReranker
 
 __all__ = [
     "BruteForceIndex",
@@ -10,4 +11,5 @@ __all__ = [
     "ExternalSearchIndex",
     "HnswIndex",
     "InMemoryImageEmbeddingStore",
+    "KReciprocalReranker",
 ]

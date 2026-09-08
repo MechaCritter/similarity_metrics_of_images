@@ -7,7 +7,7 @@
 - [Structural](structural/): SSIM and MSSSIM
 - [Pixelwise](pixelwise/): PSNR
 - [Classic](classic/): Classical embedding methods pre deep learning era.
-- [Image similarity retrieval](image_similarity_retrieval/): Image store and its search indexes
+- [Image similarity retrieval](image_similarity_retrieval/): Image store, its search indexes and the re-ranking of its results
 - [Features](sphinx/features/intro.rst): Image Feature extractors
 - [Neural networks](neural_networks/): Siamese Networks, Triplet Networks, CLIP
 embedders, ...
