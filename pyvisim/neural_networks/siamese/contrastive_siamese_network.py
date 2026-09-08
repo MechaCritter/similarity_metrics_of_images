@@ -44,7 +44,8 @@ class ContrastiveSiameseNetwork(BackboneWithHead):
     Computer Society Conference on Computer Vision and Pattern Recognition
     (CVPR), Vol. 2, 1735-1742. https://doi.org/10.1109/CVPR.2006.100
 
-    :param backbone: name of feature-extraction network.
+    :param backbone: name of feature-extraction network. See
+        ``https://mechacritter.github.io/Python-Visual-Similarity/docs/sphinx/_build/html/neural_networks/backbones.html``.
     :param embedding_dim: Dimensionality of the projected embedding space.
     :param similarity_func: Name of the built-in similarity metric used to score
         two embeddings. One of ``"cosine"``, ``"euclidean"``, ``"l1"``

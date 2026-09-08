@@ -5,6 +5,7 @@ learns to distinguish between images.
 
 # Table of contents
 
+- [Backbones](backbones.md)
 - [Contrastive Siamese Network](contrastive_siamese.md)
 - [BCE Siamese Network](bce_siamese.md)
 - [Triplet Neural Network](triplet.md)
