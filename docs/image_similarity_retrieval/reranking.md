@@ -23,10 +23,8 @@ images.
 
 - **Original distance.** $d(p, g_i)$ is the score the store ranked the candidate
   by, and $d(g_i, g_j)$ is computed from the candidates' embeddings in the
-  store's `space`, so the whole $(N + 1) \times (N + 1)$ matrix speaks one
-  metric. Every row of it is divided by its largest entry (reference
-  implementation), so the following steps see distances in $[0, 1]$ whatever
-  the metric.
+  store's `space`. Every row of it is divided by its largest entry (reference
+  implementation), and hence lies in range $[0, 1]$.
 
 - **k-nearest neighbours, Eq. (2).** The ranking list $\mathcal{L}(p, \mathcal{G})$
   sorts the set by $d$, and $N(p, k)$ is its top-$k$:
