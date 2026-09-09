@@ -1,6 +1,14 @@
 # Changelog
 
-## [Unreleased]
+> [!NOTE]
+> This file is frozen. It documents releases up to and including `0.9.3`.
+> Release notes for later versions are managed with
+> [reno](https://docs.openstack.org/reno/latest/) and published on the
+> [GitHub Releases page](https://github.com/MechaCritter/Python-Visual-Similarity/releases).
+> See [CONTRIBUTING.md](CONTRIBUTING.md#release-notes) for more
+information.
+
+## [0.9.3] - ...  # TODO: release date
 
 ### Added
 - Every similarity metric now takes a `batch_size` argument, exposes it as the
@@ -83,11 +91,6 @@ image_store = InMemoryImageEmbeddingStore(
 |---|---|
 | 2936 s | 2706 s |
 
-### Removed
-- ⚠️ `DeepConvFeature` no longer appends normalized `(x, y)` coordinates to its
-  descriptors: the `spatial_embedding` argument is gone and `output_dim` is now
-  the channel count of the selected conv layer.
-
 ### Changed
 - Added backbones resnet34, resnet50, resnet101, resnet152 under
 `pyvisim.neural_networks.backbones`.
@@ -109,6 +112,9 @@ image_store = InMemoryImageEmbeddingStore(
   written by an earlier release cannot be loaded by this one.
 
 ### Removed
+- ⚠️ `DeepConvFeature` no longer appends normalized `(x, y)` coordinates to its
+  descriptors: the `spatial_embedding` argument is gone and `output_dim` is now
+  the channel count of the selected conv layer.
 - ⚠️ `pyvisim.serialization.save_embedder_state` and `load_embedder_state`.
   They only called `save_state`/`load_state` with the embedder metadata key,
   which is now exported as `EMBEDDER_METADATA_KEY`.

@@ -12,6 +12,7 @@ Use this checklist to stay on track for your first code PR:
 - **Clone this repository**: see [Set up developer environment](#set-up-developer-environment) section.
 - **Check out the coding style**: see [Code style](#code-style) section.
 - **Run tests**: run `make test-types` and `make fmt` before you make a PR.
+- **Add a release note**: run `make release-note NAME=my-change` and fill in the generated file, see [Release notes](#release-notes).
 - **Open a PR** on GitHub.
 
 ## Using AI to contribute
@@ -23,6 +24,77 @@ I know, we all use Claude/Codex/OpenClaw and co. to help us write code faster. I
 
 Please keep pull requests focused - **only one feature or fix per PR**! That would
 make review faster.
+
+## Release notes
+
+Every PR must include a release note under `releasenotes/notes`.
+
+PRs whose changes are limited to
+tests, comments, docstrings or the CI can be labelled `ignore-for-release-notes`
+by a maintainer to bypass the check.
+
+To create one:
+
+```bash
+make release-note NAME=your-change
+```
+
+This writes `releasenotes/notes/your-change-<unique-id>.yaml`. Then, **delete the sections that do not apply** and fill in the rest:
+
+```yaml
+---
+features:
+  - |
+    Implemented batch size for ``ClipEmbedder``.
+performance:
+  - |
+    Embedding all train images in the Oxford Flowers dataset went from
+    60 s to 30 s on the GPU with ``PYVISIM_NUM_THREADS=4``.
+
+    Specs: NVIDIA GeForce RTX 3090, CUDA 12.2, torch 2.7.1, Intel Core i9-13900K, 32 GB RAM, Ubuntu 22.04.3 LTS.
+```
+
+The sections are `highlights`, `upgrade`, `features`, `enhancements`,
+`performance`, `issues`, `deprecations`, `security` and `fixes`. Use `upgrade`
+for breaking changes, and say how a user can tell whether they are affected and
+what to do about it.
+
+Each section is rendered as
+[reStructuredText](https://www.sphinx-doc.org/en/master/usage/restructuredtext/basics.html). If
+you are not yet familiar with this format, feel
+free to check out the provided link.
+
+> [!TIP]
+> You can also write your release note in **Markdown** and convert it to **reStructuredText** with `pandoc` if you are more comfortable with Markdown:
+>
+> ```bash
+> pandoc -f markdown -t rst -o releasenotes/notes/your-change-<unique-id>.rst releasenotes/notes/your-change-<unique-id>.md
+> ```
+
+### Writing code in `.rst` format
+
+For inline code, use double backticks:
+
+```
+``ClipEmbedder``
+```
+
+For code blocks, use the
+[code directive](https://www.sphinx-doc.org/en/master/usage/restructuredtext/directives.html#directive-code-block):
+
+```
+.. code:: python
+
+    from pyvisim.neural_networks import ClipEmbedder
+
+    embedder = ClipEmbedder(batch_size=32)
+```
+
+> [!IMPORTANT]
+> Run `pre-commit run --all-files` if the CI complains about formatting.
+
+> [!IMPORTANT]
+> Commit the note on the same branch as your code, so it is reviewed together with the change it describes.
 
 ## Reporting issues
 
