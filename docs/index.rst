@@ -1,20 +1,13 @@
 pyvisim
 =======
 
-A Python library for image similarity analysis using image embedders and
-neural networks.
-
-``pyvisim`` computes image similarity by turning images into fixed-size
-vectors and comparing those vectors with a similarity function. Start with
-:doc:`getting started <getting_started>` for the big picture, then drill
-into the per-module pages, each of which documents the public classes
-together with all of their public methods.
+A Python library for image similarity analysis and retrieval.
 
 .. toctree::
    :maxdepth: 2
    :caption: Getting started
 
-   getting_started
+   getting_started/getting_started
 
 .. toctree::
    :maxdepth: 2
@@ -30,3 +23,9 @@ together with all of their public methods.
    pixelwise/index
    typing/index
    eval/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials
+
+   tutorials/tutorial
