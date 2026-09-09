@@ -371,36 +371,87 @@ def test_query_expansion_handles_a_gallery_smaller_than_its_neighbourhood(
     assert ranked[0].path == gallery_paths[0]
 
 
-def test_alpha_query_expansion_follows_the_paper() -> None:
+def _unit(vectors: np.ndarray) -> np.ndarray:
+    """L2-normalise along the last axis, whatever the leading axes are.
+
+    :param vectors: A ``(D,)`` vector or any block of them.
+    :returns: The vectors with unit length, in the shape they came in.
+    """
+    return vectors / np.linalg.norm(vectors, axis=-1, keepdims=True)
+
+
+# The expansion answers a single ``(D,)`` query against its own ``(n, D)``
+# neighbours and an ``(M, D)`` batch against the ``(M, n, D)`` block holding
+# the neighbours of each of its queries. Every case below is stated in both
+# forms: the batch carries the single case in its first row and a second query
+# that is the same scenario turned onto the other axis, which is what shows
+# that the rows of a batch stay independent of one another.
+@pytest.mark.parametrize(
+    ("query", "neighbours"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-1.0, 0.0]]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array(
+                [
+                    [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-1.0, 0.0]],
+                    [[0.0, 1.0], [1.0, 0.0], [1.0, 1.0], [0.0, -1.0]],
+                ]
+            ),
+            id="batched",
+        ),
+    ],
+)
+def test_alpha_query_expansion_follows_the_paper(
+    query: np.ndarray, neighbours: np.ndarray
+) -> None:
     """The expansion is the normalised sum of the query and its weighted neighbours.
 
     The weight of a neighbour is its cosine similarity to the query raised to
     ``alpha``, the query itself weighs one, and a negative similarity weighs
-    nothing.
+    nothing. Every query meets one neighbour of its own direction, one
+    orthogonal to it, the diagonal, and its opposite. It is expected that
+    only the first and the diagonal contribute.
     """
-    query = np.array([1.0, 0.0])
-    neighbours = np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-1.0, 0.0]])
     expanded = _alpha_query_expansion(query, neighbours, alpha=1.0)
     diagonal = np.array([1.0, 1.0]) / np.sqrt(2.0)
     expected = query + query + (1.0 / np.sqrt(2.0)) * diagonal
-    expected /= np.linalg.norm(expected)
     assert expanded.dtype == np.float32
-    assert np.allclose(expanded, expected, atol=1e-6)
+    assert expanded.shape == query.shape
+    assert np.allclose(expanded, _unit(expected), atol=1e-6)
 
 
-def test_zero_alpha_reduces_to_the_average_query_expansion() -> None:
+@pytest.mark.parametrize(
+    ("query", "neighbours"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([[0.8, 0.6], [1.0, 1.0]]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array([[[0.8, 0.6], [1.0, 1.0]], [[0.6, 0.8], [-1.0, 1.0]]]),
+            id="batched",
+        ),
+    ],
+)
+def test_zero_alpha_reduces_to_the_average_query_expansion(
+    query: np.ndarray, neighbours: np.ndarray
+) -> None:
     """``alpha=0`` weights every resembling neighbour alike, whatever its similarity.
 
-    The two neighbours have different cosine similarities to the query (about
-    0.8 and 0.7), yet both enter the plain average query expansion with the
-    same unit weight.
+    The two neighbours of a query have different cosine similarities to it
+    (about 0.8 and 0.7), yet both enter the plain average query expansion with
+    the same unit weight.
     """
-    query = np.array([1.0, 0.0])
-    neighbours = np.array([[0.8, 0.6], [1.0, 1.0]])
     expanded = _alpha_query_expansion(query, neighbours, alpha=0.0)
-    expected = query + np.array([0.8, 0.6]) + np.array([1.0, 1.0]) / np.sqrt(2.0)
-    expected /= np.linalg.norm(expected)
-    assert np.allclose(expanded, expected, atol=1e-6)
+    expected = query + _unit(neighbours[..., 0, :]) + _unit(neighbours[..., 1, :])
+    assert np.allclose(expanded, _unit(expected), atol=1e-6)
 
 
 @pytest.mark.parametrize(
@@ -427,7 +478,26 @@ def test_bad_expansion_parameters_raise(
 
 
 @pytest.mark.parametrize("alpha", [0.5, 2.0, 3.0], ids=["fractional", "even", "odd"])
-def test_negative_similarities_never_contribute(alpha: float) -> None:
+@pytest.mark.parametrize(
+    ("query", "similar", "dissimilar"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([0.8, 0.6]),
+            np.array([-0.6, 0.8]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array([[0.8, 0.6], [0.6, 0.8]]),
+            np.array([[-0.6, 0.8], [0.8, -0.6]]),
+            id="batched",
+        ),
+    ],
+)
+def test_negative_similarities_never_contribute(
+    query: np.ndarray, similar: np.ndarray, dissimilar: np.ndarray, alpha: float
+) -> None:
     """Clipping happens before exponentiation, so no NaNs and no sign flips.
 
     Given is a query vector, one similar and one dissimilar neighbour vector.
@@ -447,14 +517,15 @@ def test_negative_similarities_never_contribute(alpha: float) -> None:
             arbitrary amount. -d carries no relation to the query, whereas
             negative weights are supposed to contribute nothing.
     """
-    query = np.array([1.0, 0.0])
-    similar = np.array([0.8, 0.6])  # s = +0.8, contributes
-    dissimilar = np.array([-0.6, 0.8])  # s = -0.6, must not contribute
-
+    # ``similar`` sits at s = +0.8 and contributes, ``dissimilar`` at s = -0.6
+    # and must not. Stacking along the neighbour axis holds for a lone query
+    # and for a batch alike.
     with_dissimilar = _alpha_query_expansion(
-        query, np.stack([similar, dissimilar]), alpha=alpha
+        query, np.stack([similar, dissimilar], axis=-2), alpha=alpha
     )
-    without_dissimilar = _alpha_query_expansion(query, similar[None, :], alpha=alpha)
+    without_dissimilar = _alpha_query_expansion(
+        query, similar[..., None, :], alpha=alpha
+    )
 
     # The control neighbor must actually move the query, otherwise the
     # equality assertion below is vacuous.
@@ -464,7 +535,24 @@ def test_negative_similarities_never_contribute(alpha: float) -> None:
     assert np.allclose(with_dissimilar, without_dissimilar, atol=1e-6)
 
 
-def test_zero_alpha_still_ignores_negative_neighbours() -> None:
+@pytest.mark.parametrize(
+    ("query", "neighbours"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([[-1.0, 0.0]]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array([[[-1.0, 0.0]], [[0.6, -0.8]]]),
+            id="batched",
+        ),
+    ],
+)
+def test_zero_alpha_still_ignores_negative_neighbours(
+    query: np.ndarray, neighbours: np.ndarray
+) -> None:
     """
     Consider these steps:
         * cosine([1, 0], [-1, 0]) = -1
@@ -472,8 +560,7 @@ def test_zero_alpha_still_ignores_negative_neighbours() -> None:
             => The dissimilar neighbour contributes to the expansion.
 
     Hence, the clip must not be a plain maximum."""
-    query = np.array([1.0, 0.0])
-    expanded = _alpha_query_expansion(query, np.array([[-1.0, 0.0]]), alpha=0.0)
+    expanded = _alpha_query_expansion(query, neighbours, alpha=0.0)
     assert np.allclose(expanded, query, atol=1e-6)
 
 
