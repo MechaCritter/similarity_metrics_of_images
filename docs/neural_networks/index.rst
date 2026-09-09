@@ -1,7 +1,7 @@
 Neural networks
 ===============
 
-.. include:: ../../neural_networks/README.md
+.. include:: README.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

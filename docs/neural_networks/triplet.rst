@@ -1,7 +1,7 @@
 TripletNeuralNetwork
 ====================
 
-.. include:: ../../neural_networks/triplet.md
+.. include:: triplet.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

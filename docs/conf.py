@@ -27,9 +27,18 @@ extensions = [
 ]
 
 templates_path = ["_templates"]
-# 'intro.rst' files are fragments pulled into the section index via
-# '.. include::', so they must not be built as standalone documents.
-exclude_patterns = ["_build", "Thumbs.db", ".DS_Store", "**/intro.rst"]
+# Markdown never stands on its own here: it is either pulled into an rST page
+# via '.. include::' ('benchmark.md') or it is developer documentation that the
+# published site does not carry ('arc42.md', 'testing/', 'benchmarks/').
+# 'intro.rst' files are fragments pulled into the section index the same way.
+exclude_patterns = [
+    "_build",
+    "Thumbs.db",
+    ".DS_Store",
+    "**/intro.rst",
+    "*.md",
+    "**/*.md",
+]
 
 language = "en"
 

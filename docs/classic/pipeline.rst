@@ -1,15 +1,14 @@
-RootSIFT
+Pipeline
 ========
 
-.. include:: ../../features/rootsift.md
+.. include:: pipeline.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 
 API reference
 -------------
 
-.. autoclass:: pyvisim.features.RootSIFT
+.. autoclass:: pyvisim.classic.Pipeline
    :members:
    :inherited-members:
-   :special-members: __call__
    :show-inheritance:

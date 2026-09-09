@@ -1,7 +1,7 @@
 ContrastiveSiameseNetwork
 =========================
 
-.. include:: ../../neural_networks/contrastive_siamese.md
+.. include:: contrastive_siamese.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

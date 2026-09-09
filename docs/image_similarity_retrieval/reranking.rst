@@ -1,7 +1,7 @@
 Re-ranking
 ==========
 
-.. include:: ../../image_similarity_retrieval/reranking.md
+.. include:: reranking.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

@@ -1,7 +1,7 @@
 External Search Index
 =====================
 
-.. include:: ../../image_similarity_retrieval/external_indexes.md
+.. include:: external_indexes.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

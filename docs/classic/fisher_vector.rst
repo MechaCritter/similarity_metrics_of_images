@@ -1,14 +1,14 @@
-ClipEmbedder
-============
+FisherVectorEmbedder
+====================
 
-.. include:: ../../neural_networks/clip.md
+.. include:: fisher_vector.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 
 API reference
 -------------
 
-.. autoclass:: pyvisim.neural_networks.ClipEmbedder
+.. autoclass:: pyvisim.classic.FisherVectorEmbedder
    :members:
    :inherited-members:
    :show-inheritance:

@@ -12,6 +12,6 @@ API reference
 .. autoclass:: pyvisim.image_store.Candidate
    :members:
 
-.. include:: ../../image_similarity_retrieval/image_store.md
+.. include:: image_store.md
    :parser: myst_parser.sphinx_
    :start-line: 1

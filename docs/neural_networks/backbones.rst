@@ -1,6 +1,6 @@
 Backbones
 =========
 
-.. include:: ../../neural_networks/backbones.md
+.. include:: backbones.md
    :parser: myst_parser.sphinx_
    :start-line: 1

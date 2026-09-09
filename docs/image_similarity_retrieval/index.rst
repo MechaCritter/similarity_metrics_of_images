@@ -1,7 +1,7 @@
 Image Similarity Retrieval
 ==========================
 
-.. include:: ../../image_similarity_retrieval/README.md
+.. include:: README.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

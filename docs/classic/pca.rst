@@ -1,6 +1,6 @@
 PCA
 ===
 
-.. include:: ../../classic/pca.md
+.. include:: pca.md
    :parser: myst_parser.sphinx_
    :start-line: 1

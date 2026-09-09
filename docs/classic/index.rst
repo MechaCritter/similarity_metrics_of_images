@@ -1,7 +1,7 @@
 Classic embedders
 =================
 
-.. include:: ../../classic/README.md
+.. include:: README.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

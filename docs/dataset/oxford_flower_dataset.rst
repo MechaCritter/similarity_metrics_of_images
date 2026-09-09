@@ -1,7 +1,7 @@
 OxfordFlowerDataset
 ===================
 
-.. include:: ../../dataset/oxford_flower_dataset.md
+.. include:: oxford_flower_dataset.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

@@ -1,7 +1,7 @@
 BCESiameseNetwork
 =================
 
-.. include:: ../../neural_networks/bce_siamese.md
+.. include:: bce_siamese.md
    :parser: myst_parser.sphinx_
    :start-line: 1
 

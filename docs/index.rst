@@ -22,10 +22,10 @@ together with all of their public methods.
 
    classic/index
    features/index
-   image_retrieval/index
+   image_similarity_retrieval/index
    dataset/index
    neural_networks/index
-   distance
+   distance/index
    structural/index
    pixelwise/index
-   functions
+   eval/index
