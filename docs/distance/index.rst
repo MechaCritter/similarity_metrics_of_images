@@ -1,8 +1,6 @@
 Distance metrics
 ================
 
-File: ``pyvisim/distance.py``
-
 Implementations of the pairwise metrics used to compare image embeddings. Each
 function takes two 2-D matrices, ``x`` of shape ``(N, D)`` and ``y`` of shape
 ``(M, D)``, and returns the full ``(N, M)`` pairwise result as float64:

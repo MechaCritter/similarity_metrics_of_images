@@ -27,14 +27,16 @@ The table below includes feature extractors currently implemented in
      - SIFT with Hellinger normalization (default extractor)
    * - :doc:`DeepConvFeature <deep_conv_feature/deep_conv_feature>`
      - layer channels
-     - CNN feature maps
+     - Neural Network feature maps
    * - :doc:`Lambda <lambda/lambda>`
      - user-defined
      - wraps any custom function
 
+Table of Contents
+-----------------
+
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    sift/sift
    rootsift/rootsift

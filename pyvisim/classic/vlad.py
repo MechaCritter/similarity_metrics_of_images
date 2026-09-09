@@ -63,7 +63,7 @@ class VLADEmbedder(ClusteringBasedEmbedder):
     :param kmeans_params: Arguments for K-Means during vocabulary learning. See
         ``https://mechacritter.github.io/Python-Visual-Similarity/classic/vlad/vlad.html#k-means-parameters-kmeans-params``.
     :param pca_params: Arguments for the Principal Component Analysis during vocabulary learning. See
-        ``https://mechacritter.github.io/Python-Visual-Similarity/classic/pca/pca.html#parameters-pca-params``.
+        ``https://mechacritter.github.io/Python-Visual-Similarity/classic/vlad/vlad.html#pca-parameters-pca-params``.
     :param power_norm_weight: Exponent for power normalization
     :param power_norm_weight: Exponent for power normalization
     :param norm_order: Norm order for normalization (default: 2).

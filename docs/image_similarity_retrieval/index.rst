@@ -13,9 +13,11 @@ query with its best matches before the final search, and the
 candidates by how much their neighbourhoods agree with the query's, improving
 the ``mean average precision`` of the retrieval.
 
+Table of Contents
+-----------------
+
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    image_store/image_store
    external_search_index/external_search_index

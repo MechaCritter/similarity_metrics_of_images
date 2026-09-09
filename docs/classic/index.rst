@@ -13,18 +13,12 @@ Typical local descriptors used were ``SIFT``, ``RootSIFT``, or ``SURF``.
 ``PCA`` is often applied to reduce the dimensionality of the local descriptors
 before aggregation, which can sometimes improve performance.
 
-Table of contents
+Table of Contents
 -----------------
-
-- :doc:`Vector of Locally Aggregated Descriptors <vlad/vlad>`
-- :doc:`Fisher Vector <fisher_vector/fisher_vector>`
-- :doc:`Pipeline <pipeline/pipeline>`
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    vlad/vlad
    fisher_vector/fisher_vector
    pipeline/pipeline
-   pca/pca

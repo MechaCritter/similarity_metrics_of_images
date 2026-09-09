@@ -4,18 +4,11 @@ Neural networks
 This module includes neural networks (``torch.nn.Module``, or neural network -
 based - embedders) that learns to distinguish between images.
 
-Table of contents
+Table of Contents
 -----------------
-
-- :doc:`Backbones <backbones/backbones>`
-- :doc:`Contrastive Siamese Network <contrastive_siamese/contrastive_siamese>`
-- :doc:`BCE Siamese Network <bce_siamese/bce_siamese>`
-- :doc:`Triplet Neural Network <triplet/triplet>`
-- :doc:`CLIP Embedder <clip/clip>`
 
 .. toctree::
    :maxdepth: 1
-   :hidden:
 
    contrastive_siamese/contrastive_siamese
    bce_siamese/bce_siamese
