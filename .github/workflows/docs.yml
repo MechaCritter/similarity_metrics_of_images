@@ -45,6 +45,27 @@ jobs:
       - name: Install dependencies
         run: uv sync --group docs --extra nn
 
+      # Binaries are kept out of the main history, so the sidebar logo lives
+      # under 'docs/logo/' on the orphan 'assets' branch and is copied into the
+      # static folder that furo resolves 'light_logo' and 'dark_logo' against.
+      - name: Fetch the logo from the assets branch
+        run: |
+          set -euo pipefail
+          dest="docs/sphinx/_static"
+          if ! git ls-remote --exit-code --heads origin assets >/dev/null 2>&1; then
+            echo "::warning::No assets branch yet. The docs build without a logo."
+            exit 0
+          fi
+          git fetch --depth=1 origin assets
+          if ! git ls-tree --name-only FETCH_HEAD docs/logo | grep -q .; then
+            echo "::warning::The assets branch carries no 'docs/logo' folder."
+            exit 0
+          fi
+          # '--strip-components=2' drops the 'docs/logo/' prefix so the files
+          # land directly in the static folder.
+          git archive FETCH_HEAD docs/logo | tar -x --strip-components=2 -C "$dest"
+          echo "Copied $(find "$dest" -name '*.png' | wc -l) logo file(s)."
+
       - name: Build HTML documentation
         run: uv run --group docs sphinx-build -W -b html docs/sphinx docs/sphinx/_build/html
 

@@ -1,0 +1,6 @@
+---
+enhancements:
+  - |
+    The documentation now shows the pyvisim symbol above the title in the
+    sidebar, with a separate variant for the dark theme, and a clickable
+    GitHub icon in the page footer.
