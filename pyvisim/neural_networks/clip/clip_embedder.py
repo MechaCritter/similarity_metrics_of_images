@@ -44,7 +44,7 @@ with OptionalImport(package="torch", extra="nn") as _torch_import:
 _torch_import.check()
 
 #: On-disk format version of the serialised CLIP embedder state.
-_CLIP_EMBEDDER_FORMAT_VERSION = 2
+_CLIP_EMBEDDER_FORMAT_VERSION = 3
 
 
 def _build_preprocess(
@@ -105,8 +105,7 @@ class ClipEmbedder(SerializableImageEmbedder):
     :param device: Device to run the model on (``"cpu"`` or ``"cuda"``).
         Defaults to ``"cuda"`` when a CUDA device is available, else
         ``"cpu"``. The model runs in ``float32`` on either device.
-    :param normalize: Whether to L2-normalize the returned embeddings
-        (default ``True``).
+    :param normalize: Whether to L2-normalize the returned embeddings.
     :param similarity_func: Name of the built-in similarity metric used to
         score two embeddings. One of ``"cosine"`` (default), ``"euclidean"``,
         ``"l1"`` or ``"manhattan"``.
@@ -134,7 +133,14 @@ class ClipEmbedder(SerializableImageEmbedder):
 
     #: Keys a serialised state must contain to be a valid embedder file.
     _STATE_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"embedder_class", "similarity_func", "batch_size", "config", "state_dict"}
+        {
+            "embedder_class",
+            "similarity_func",
+            "normalize",
+            "batch_size",
+            "config",
+            "state_dict",
+        }
     )
 
     def __init__(
@@ -148,8 +154,12 @@ class ClipEmbedder(SerializableImageEmbedder):
         cache_dir: str | Path | None = None,
         batch_size: int = 16,
     ) -> None:
-        super().__init__(similarity_func=similarity_func, batch_size=batch_size)
-        self._build(variant, pretrained, device=device, normalize=normalize)
+        super().__init__(
+            similarity_func=similarity_func,
+            normalize=normalize,
+            batch_size=batch_size,
+        )
+        self._build(variant, pretrained, device=device)
         load_vision_weights(
             self._model, fetch_checkpoint(variant, pretrained, cache_dir=cache_dir)
         )
@@ -176,7 +186,6 @@ class ClipEmbedder(SerializableImageEmbedder):
             config["variant"],
             config["pretrained"],
             device=config["device"],
-            normalize=config["normalize"],
         )
         return embedder
 
@@ -186,7 +195,6 @@ class ClipEmbedder(SerializableImageEmbedder):
         pretrained: str,
         *,
         device: str | None,
-        normalize: bool,
     ) -> None:
         """
         Build the image tower and the preprocessing of a checkpoint.
@@ -198,14 +206,12 @@ class ClipEmbedder(SerializableImageEmbedder):
         :param variant: CLIP variant name.
         :param pretrained: Pretrained tag naming the weights.
         :param device: Device to run the model on, or ``None`` to auto-select.
-        :param normalize: Whether to L2-normalize the returned embeddings.
         :raises ValueError: If ``variant`` or ``pretrained`` is not supported.
         """
         self._config = get_model_config(variant)
         self._spec = get_checkpoint_spec(variant, pretrained)
         self._variant = variant.replace("/", "-")
         self._pretrained = pretrained
-        self._normalize = normalize
         self._device = resolve_device(device)
         model = build_vision_model(self._config, quick_gelu=self._spec.quick_gelu)
         self._model = model.eval().to(self._device)
@@ -216,11 +222,11 @@ class ClipEmbedder(SerializableImageEmbedder):
             "format_version": _CLIP_EMBEDDER_FORMAT_VERSION,
             "embedder_class": type(self).__name__,
             "similarity_func": self._similarity_func_name,
+            "normalize": self.normalize,
             "batch_size": self.batch_size,
             "config": {
                 "variant": self._variant,
                 "pretrained": self._pretrained,
-                "normalize": self._normalize,
                 "device": self._device,
             },
             "state_dict": encode_state_dict(self._model),
@@ -231,6 +237,7 @@ class ClipEmbedder(SerializableImageEmbedder):
         cls._reject_unsupported_kwargs(kwargs)
         embedder = cls._from_config(state["config"])
         embedder.similarity_func = state["similarity_func"]
+        embedder._restore_normalize(state)
         embedder._restore_batch_size(state)
         embedder._model.load_state_dict(decode_state_dict(state["state_dict"]))
         return embedder
@@ -248,11 +255,6 @@ class ClipEmbedder(SerializableImageEmbedder):
     @property
     def device(self) -> str:
         return self._device
-
-    @property
-    def normalize(self) -> bool:
-        """Whether the returned embeddings are L2-normalized."""
-        return self._normalize
 
     @property
     def embedding_dim(self) -> int:
@@ -284,16 +286,13 @@ class ClipEmbedder(SerializableImageEmbedder):
         Runs one batch of canonical images through the image tower.
 
         :param batch: Canonical ``uint8`` images of shape ``(H, W[, C])``.
-        :return: The ``(len(batch), embedding_dim)`` embeddings, L2-normalized
-            when ``normalize`` is on.
+        :return: The ``(len(batch), embedding_dim)`` embeddings.
         """
         tensors = torch.stack([self._preprocess(image) for image in batch])
         features = self._model(tensors.to(self._device))
-        if self._normalize:
-            features = features / features.norm(dim=-1, keepdim=True)
         return np.asarray(features.float().cpu().numpy(), dtype=np.float32)
 
-    def embed(
+    def _embed(
         self,
         images: ImageInput,
         *,
@@ -314,6 +313,6 @@ class ClipEmbedder(SerializableImageEmbedder):
         return (
             f"{self.__class__.__name__}(variant={self._variant}, "
             f"pretrained={self._pretrained}, device={self._device}, "
-            f"normalize={self._normalize}, "
+            f"normalize={self.normalize}, "
             f"similarity_func={self._similarity_func_name})"
         )

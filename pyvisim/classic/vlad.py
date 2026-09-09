@@ -73,6 +73,7 @@ class VLADEmbedder(ClusteringBasedEmbedder):
         ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
     :param raise_error_when_pca_incompatible: When set to True, if the new clustering model has a different input size
                                         than the PCA model's output size, the PCA model will be reset to None.
+    :param normalize: Whether ``embed`` L2-normalizes the embeddings it returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
 
@@ -98,6 +99,7 @@ class VLADEmbedder(ClusteringBasedEmbedder):
         similarity_func: str = "cosine",
         raise_error_when_pca_incompatible: bool = False,
         *,
+        normalize: bool = True,
         batch_size: int = 16,
     ) -> None:
         if kmeans_params and "n_clusters" in kmeans_params:
@@ -116,6 +118,7 @@ class VLADEmbedder(ClusteringBasedEmbedder):
             flatten=flatten,
             pca=pca,
             raise_error_when_pca_incompatible=raise_error_when_pca_incompatible,
+            normalize=normalize,
             batch_size=batch_size,
         )
 
@@ -130,7 +133,7 @@ class VLADEmbedder(ClusteringBasedEmbedder):
             )
         super()._set_clustering_model(clustering_model)
 
-    def embed(
+    def _embed(
         self,
         images: ImageInput,
         *,

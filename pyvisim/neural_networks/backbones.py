@@ -187,6 +187,7 @@ class BackboneWithHead(NeuralImageEmbedder):
     :param similarity_func: Name of the built-in similarity metric used to score
         two embeddings. One of ``"cosine"`` (default), ``"euclidean"``, ``"l1"``
         or ``"manhattan"``.
+    :param normalize: Whether ``embed`` L2-normalizes the embeddings it returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
     :raises ValueError: If ``embedding_dim`` is not a positive integer, if
@@ -202,9 +203,14 @@ class BackboneWithHead(NeuralImageEmbedder):
         pretrained_backbone: bool = True,
         similarity_func: str = "cosine",
         *,
+        normalize: bool = True,
         batch_size: int = 16,
     ):
-        super().__init__(similarity_func=similarity_func, batch_size=batch_size)
+        super().__init__(
+            similarity_func=similarity_func,
+            normalize=normalize,
+            batch_size=batch_size,
+        )
         if embedding_dim <= 0:
             raise ValueError(
                 f"embedding_dim must be a positive integer, got {embedding_dim}."
@@ -361,7 +367,7 @@ class BackboneWithHead(NeuralImageEmbedder):
             if was_training:
                 self.train()
 
-    def embed(
+    def _embed(
         self,
         images: ImageInput,
         *,

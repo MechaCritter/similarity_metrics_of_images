@@ -1,0 +1,25 @@
+---
+features:
+  - |
+    Every image embedder now takes a ``normalize`` parameter, which
+    ``ImageEmbedderBase`` owns and all embedders inherit. It defaults to
+    ``True``, so ``embed`` returns rows of unit L2 length and two embeddings
+    can be compared with a plain dot product. Pass ``normalize=False`` to get
+    the raw encoding instead.
+upgrade:
+  - |
+    ``VLADEmbedder``, ``FisherVectorEmbedder``, ``Pipeline``,
+    ``ContrastiveSiameseNetwork`` and ``TripletNeuralNetwork`` now L2-normalize
+    what ``embed`` returns. Vectors already stored in an
+    ``InMemoryImageEmbeddingStore`` built in the ``"l2"`` or ``"ip"`` space are
+    on a different scale than newly embedded queries, so rebuild such a store
+    or construct the embedder with ``normalize=False``. A ``"cosine"`` store is
+    unaffected, since it normalizes its vectors anyway.
+  - |
+    Subclasses outside the library that implement ``embed`` have to rename it
+    to ``_embed``: ``ImageEmbedderBase.embed`` is now a concrete method that
+    applies ``normalize`` to whatever ``_embed`` returns.
+  - |
+    The ``.embedder`` file format carries the ``normalize`` setting and is
+    bumped to version 3. Files written by earlier versions lack the key and no
+    longer load, so re-save any embedder saved with pyvisim 0.9.3 or older.

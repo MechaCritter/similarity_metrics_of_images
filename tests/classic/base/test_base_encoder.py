@@ -48,6 +48,46 @@ def test_similarity_func_rejects_unknown_name() -> None:
         VLADEmbedder(n_clusters=8, similarity_func="dot")
 
 
+# §3.1a the shared normalization flag
+
+
+def test_normalize_rejects_non_boolean() -> None:
+    """A non-boolean ``normalize`` raises ``ValueError``."""
+    with pytest.raises(ValueError, match="normalize must be a boolean"):
+        VLADEmbedder(n_clusters=8, normalize=1)  # type: ignore[arg-type]
+
+
+def test_normalize_off_keeps_the_raw_embedding(
+    learned_vlad: VLADEmbedder, checkerboard_image: ImageObj
+) -> None:
+    """With ``normalize`` off, ``embed`` returns the encoding unscaled."""
+    raw = VLADEmbedder.from_dict({**learned_vlad.to_dict(), "normalize": False})
+    norms = np.linalg.norm(raw.embed([checkerboard_image.array]), axis=1)
+    assert not np.allclose(norms, 1.0, atol=1e-3)
+
+
+def test_normalize_on_scales_the_raw_embedding(
+    learned_vlad: VLADEmbedder, checkerboard_image: ImageObj
+) -> None:
+    """Normalizing only rescales the embedding, it does not turn it."""
+    raw = VLADEmbedder.from_dict({**learned_vlad.to_dict(), "normalize": False})
+    unscaled = raw.embed([checkerboard_image.array])
+    scaled = learned_vlad.embed([checkerboard_image.array])
+    assert np.linalg.norm(scaled, axis=1) == pytest.approx([1.0], rel=1e-5)
+    assert scaled == pytest.approx(
+        unscaled / np.linalg.norm(unscaled, axis=1, keepdims=True), rel=1e-5
+    )
+
+
+def test_normalize_survives_a_round_trip(
+    learned_vlad: VLADEmbedder, tmp_path: Path
+) -> None:
+    """The normalization setting is part of the serialised embedder state."""
+    raw = VLADEmbedder.from_dict({**learned_vlad.to_dict(), "normalize": False})
+    reloaded = VLADEmbedder.load_from_disk(raw.save_to_disk(tmp_path / "model"))
+    assert reloaded.normalize is False
+
+
 # §3.1b loading a clustering model from a scikit-learn estimator
 
 
@@ -100,7 +140,7 @@ def test_load_clustering_model_from_sklearn_fisher() -> None:
 class _NoModelEmbedder(ClusteringBasedEmbedder):
     """Minimal concrete embedder used to test the "no clustering model" path."""
 
-    def embed(self, images: Iterable[np.ndarray], flatten: bool = True) -> np.ndarray:
+    def _embed(self, images: Iterable[np.ndarray], flatten: bool = True) -> np.ndarray:
         """Unused stub; ``learn`` fails before embedding is ever reached."""
         raise NotImplementedError
 

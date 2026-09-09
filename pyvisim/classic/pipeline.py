@@ -12,7 +12,7 @@ from ..typing import (
 from ..utils.image_utils import iter_image_batches
 
 #: On-disk format version of the serialised pipeline state.
-_PIPELINE_FORMAT_VERSION = 2
+_PIPELINE_FORMAT_VERSION = 3
 
 
 class Pipeline(SerializableImageEmbedder):
@@ -27,6 +27,8 @@ class Pipeline(SerializableImageEmbedder):
     :param embedders: A list of SerializableImageEmbedder instances.
     :param similarity_func: Name of the built-in similarity metric to use. One of
         ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
+    :param normalize: Whether :meth:`embed` L2-normalizes the joined embeddings
+        it returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
     """
@@ -35,7 +37,7 @@ class Pipeline(SerializableImageEmbedder):
 
     #: Keys a serialised state must contain to be a valid pipeline file.
     _STATE_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"embedder_class", "classic", "similarity_func", "batch_size"}
+        {"embedder_class", "classic", "similarity_func", "normalize", "batch_size"}
     )
 
     def __init__(
@@ -43,11 +45,16 @@ class Pipeline(SerializableImageEmbedder):
         embedders: list[SerializableImageEmbedder],
         similarity_func: str = "cosine",
         *,
+        normalize: bool = True,
         batch_size: int = 16,
     ):
         self._check_valid_embedders(embedders)
         self.embedders = embedders
-        super().__init__(similarity_func=similarity_func, batch_size=batch_size)
+        super().__init__(
+            similarity_func=similarity_func,
+            normalize=normalize,
+            batch_size=batch_size,
+        )
 
     def _check_valid_embedders(
         self, embedders: list[SerializableImageEmbedder]
@@ -68,6 +75,7 @@ class Pipeline(SerializableImageEmbedder):
             "embedder_class": type(self).__name__,
             "classic": [embedder.to_dict() for embedder in self.embedders],
             "similarity_func": self._similarity_func_name,
+            "normalize": self.normalize,
             "batch_size": self.batch_size,
         }
 
@@ -82,10 +90,11 @@ class Pipeline(SerializableImageEmbedder):
             for embedder_state in state["classic"]
         ]
         pipeline = cls(embedders, similarity_func=state["similarity_func"])
+        pipeline._restore_normalize(state)
         pipeline._restore_batch_size(state)
         return pipeline
 
-    def embed(
+    def _embed(
         self,
         images: ImageInput,
         *,
