@@ -20,8 +20,9 @@ from pyvisim.image_store import (
 
 # The reading stage is internal to the store, which exposes no way to run it
 # without embedding. Driving it directly is what keeps the embedder out of the
-# measurement.
-from pyvisim.image_store.image_store import _decoded_images
+# measurement. The expansion formula is checked on its own for the same reason:
+# the store only ever applies it to embeddings it computed itself.
+from pyvisim.image_store.image_store import _alpha_query_expansion, _decoded_images
 from pyvisim.neural_networks import ContrastiveSiameseNetwork
 
 #: Images the reading measurement decodes.
@@ -214,6 +215,33 @@ def test_search_returns_expected_shapes(store: InMemoryImageEmbeddingStore) -> N
     assert ids.shape == (3, 4)
 
 
+def test_embeddings_of_reads_the_given_paths(
+    store: InMemoryImageEmbeddingStore,
+    hnsw_store: InMemoryImageEmbeddingStore,
+    gallery_paths: list[str],
+) -> None:
+    """``embeddings_of`` returns the rows of the named images, in the given order."""
+    for gallery in (store, hnsw_store):
+        block = gallery.embeddings_of([gallery_paths[2], gallery_paths[0]])
+        assert block.shape == (2, gallery.dim)
+        assert np.allclose(block, gallery.embeddings[[2, 0]], atol=1e-6)
+        assert not block.flags.writeable
+
+
+def test_embeddings_of_rejects_an_unknown_path(
+    store: InMemoryImageEmbeddingStore,
+) -> None:
+    """A path the gallery does not hold is reported, not silently skipped."""
+    with pytest.raises(ValueError, match="not in the gallery"):
+        store.embeddings_of([store.paths[0], "absent.png"])
+
+
+def test_embeddings_of_rejects_no_paths(store: InMemoryImageEmbeddingStore) -> None:
+    """At least one path must be looked up."""
+    with pytest.raises(ValueError, match="at least one"):
+        store.embeddings_of([])
+
+
 def test_retrieve_recovers_self(
     store: InMemoryImageEmbeddingStore,
     gallery_paths: list[str],
@@ -225,6 +253,17 @@ def test_retrieve_recovers_self(
     results = store.retrieve_top_k_similar(probe, k=3)
     assert isinstance(results[0][0], Candidate)
     assert results[0][0].path == gallery_paths[2]
+
+
+def test_retrieved_candidate_reads_its_gallery_image(
+    store: InMemoryImageEmbeddingStore,
+    category_train_images_flat: list[np.ndarray],
+) -> None:
+    """The ``array`` of a match is the gallery image the store indexed."""
+    gray = category_train_images_flat[2]
+    probe = np.stack([gray, gray, gray], axis=-1)
+    best = store.retrieve_top_k_similar(probe, k=1)[0][0]
+    assert np.array_equal(best.array, probe)
 
 
 def test_retrieve_ranks_every_query(
@@ -264,6 +303,276 @@ def test_hnsw_store_matches_the_exact_store(
     exact = store.retrieve_top_k_similar(probe, k=5)[0]
     approximate = hnsw_store.retrieve_top_k_similar(probe, k=5)[0]
     assert [c.path for c in approximate] == [c.path for c in exact]
+
+
+# Query expansion
+
+
+def test_query_expansion_ranks_every_query(
+    store: InMemoryImageEmbeddingStore,
+    category_train_images_flat: list[np.ndarray],
+) -> None:
+    """The expanded search still yields one ranked list of ``k`` matches per query."""
+    probes = [
+        np.stack([gray, gray, gray], axis=-1) for gray in category_train_images_flat[:3]
+    ]
+    results = store.retrieve_top_k_similar(
+        probes, k=4, query_expansion=True, expansion_neighbours=5
+    )
+    assert len(results) == 3
+    assert all(len(ranked) == 4 for ranked in results)
+    assert all(isinstance(c, Candidate) for ranked in results for c in ranked)
+
+
+def test_query_expansion_recovers_self(
+    store: InMemoryImageEmbeddingStore,
+    gallery_paths: list[str],
+    category_train_images_flat: list[np.ndarray],
+) -> None:
+    """A gallery image expanded with its own neighbourhood still ranks itself first."""
+    gray = category_train_images_flat[2]
+    probe = np.stack([gray, gray, gray], axis=-1)
+    results = store.retrieve_top_k_similar(probe, k=3, query_expansion=True)
+    assert results[0][0].path == gallery_paths[2]
+
+
+def test_query_expansion_stays_in_the_category(
+    store: InMemoryImageEmbeddingStore,
+    gallery_paths: list[str],
+    category_train_images: dict[str, list[np.ndarray]],
+    category_query_images: dict[str, list[np.ndarray]],
+) -> None:
+    """The expanded query is pulled towards its own category, not the other one."""
+    offset = 0
+    for name, images in category_train_images.items():
+        own = set(gallery_paths[offset : offset + len(images)])
+        offset += len(images)
+        gray = category_query_images[name][0]
+        probe = np.stack([gray, gray, gray], axis=-1)
+        ranked = store.retrieve_top_k_similar(
+            probe, k=5, query_expansion=True, expansion_neighbours=5
+        )[0]
+        assert {candidate.path for candidate in ranked} <= own
+
+
+def test_query_expansion_handles_a_gallery_smaller_than_its_neighbourhood(
+    gallery_paths: list[str],
+    learned_vlad_embedder: VLADEmbedder,
+    category_train_images_flat: list[np.ndarray],
+) -> None:
+    """Fewer gallery images than ``expansion_neighbours`` are averaged as they are."""
+    store = InMemoryImageEmbeddingStore(gallery_paths[:3], learned_vlad_embedder)
+    gray = category_train_images_flat[0]
+    probe = np.stack([gray, gray, gray], axis=-1)
+    ranked = store.retrieve_top_k_similar(
+        probe, k=2, query_expansion=True, expansion_neighbours=50
+    )[0]
+    assert len(ranked) == 2
+    assert ranked[0].path == gallery_paths[0]
+
+
+def _unit(vectors: np.ndarray) -> np.ndarray:
+    """L2-normalise along the last axis, whatever the leading axes are.
+
+    :param vectors: A ``(D,)`` vector or any block of them.
+    :returns: The vectors with unit length, in the shape they came in.
+    """
+    return vectors / np.linalg.norm(vectors, axis=-1, keepdims=True)
+
+
+# The expansion answers a single ``(D,)`` query against its own ``(n, D)``
+# neighbours and an ``(M, D)`` batch against the ``(M, n, D)`` block holding
+# the neighbours of each of its queries. Every case below is stated in both
+# forms: the batch carries the single case in its first row and a second query
+# that is the same scenario turned onto the other axis, which is what shows
+# that the rows of a batch stay independent of one another.
+@pytest.mark.parametrize(
+    ("query", "neighbours"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-1.0, 0.0]]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array(
+                [
+                    [[1.0, 0.0], [0.0, 1.0], [1.0, 1.0], [-1.0, 0.0]],
+                    [[0.0, 1.0], [1.0, 0.0], [1.0, 1.0], [0.0, -1.0]],
+                ]
+            ),
+            id="batched",
+        ),
+    ],
+)
+def test_alpha_query_expansion_follows_the_paper(
+    query: np.ndarray, neighbours: np.ndarray
+) -> None:
+    """The expansion is the normalised sum of the query and its weighted neighbours.
+
+    The weight of a neighbour is its cosine similarity to the query raised to
+    ``alpha``, the query itself weighs one, and a negative similarity weighs
+    nothing. Every query meets one neighbour of its own direction, one
+    orthogonal to it, the diagonal, and its opposite. It is expected that
+    only the first and the diagonal contribute.
+    """
+    expanded = _alpha_query_expansion(query, neighbours, alpha=1.0)
+    diagonal = np.array([1.0, 1.0]) / np.sqrt(2.0)
+    expected = query + query + (1.0 / np.sqrt(2.0)) * diagonal
+    assert expanded.dtype == np.float32
+    assert expanded.shape == query.shape
+    assert np.allclose(expanded, _unit(expected), atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("query", "neighbours"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([[0.8, 0.6], [1.0, 1.0]]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array([[[0.8, 0.6], [1.0, 1.0]], [[0.6, 0.8], [-1.0, 1.0]]]),
+            id="batched",
+        ),
+    ],
+)
+def test_zero_alpha_reduces_to_the_average_query_expansion(
+    query: np.ndarray, neighbours: np.ndarray
+) -> None:
+    """``alpha=0`` weights every resembling neighbour alike, whatever its similarity.
+
+    The two neighbours of a query have different cosine similarities to it
+    (about 0.8 and 0.7), yet both enter the plain average query expansion with
+    the same unit weight.
+    """
+    expanded = _alpha_query_expansion(query, neighbours, alpha=0.0)
+    expected = query + _unit(neighbours[..., 0, :]) + _unit(neighbours[..., 1, :])
+    assert np.allclose(expanded, _unit(expected), atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("name", "value"),
+    [
+        ("expansion_alpha", -1.0),
+        ("expansion_alpha", float("nan")),
+        ("expansion_alpha", True),
+        ("expansion_neighbours", 0),
+        ("expansion_neighbours", 2.5),
+    ],
+)
+def test_bad_expansion_parameters_raise(
+    store: InMemoryImageEmbeddingStore,
+    category_train_images_flat: list[np.ndarray],
+    name: str,
+    value: object,
+) -> None:
+    """The expansion parameters are checked before any image is embedded."""
+    gray = category_train_images_flat[0]
+    probe = np.stack([gray, gray, gray], axis=-1)
+    with pytest.raises(ValueError, match=f"'{name}'"):
+        store.retrieve_top_k_similar(probe, k=2, **{name: value})  # type: ignore[arg-type]
+
+
+@pytest.mark.parametrize("alpha", [0.5, 2.0, 3.0], ids=["fractional", "even", "odd"])
+@pytest.mark.parametrize(
+    ("query", "similar", "dissimilar"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([0.8, 0.6]),
+            np.array([-0.6, 0.8]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array([[0.8, 0.6], [0.6, 0.8]]),
+            np.array([[-0.6, 0.8], [0.8, -0.6]]),
+            id="batched",
+        ),
+    ],
+)
+def test_negative_similarities_never_contribute(
+    query: np.ndarray, similar: np.ndarray, dissimilar: np.ndarray, alpha: float
+) -> None:
+    """Clipping happens before exponentiation, so no NaNs and no sign flips.
+
+    Given is a query vector, one similar and one dissimilar neighbour vector.
+    We want to verify 3 cases:
+
+    Case 1. alpha=0.5:
+        w = (negative) ** 0.5 = NaN
+            * We want to avoid getting NaN results
+    Case 2. alpha=2.0:
+        w = (negative) ** 2.0 = positive
+            * We don't want the query to be pulled towards a dissimilar neighbour
+        w = (positive) ** 2.0 = positive
+            * We want the query to be pulled towards a similar neighbour.
+    Case 3. alpha=3.0:
+        w = (negative) ** 3.0 = negative
+            * The query is pushed away from the neighbour, along -d, by an
+            arbitrary amount. -d carries no relation to the query, whereas
+            negative weights are supposed to contribute nothing.
+    """
+    # ``similar`` sits at s = +0.8 and contributes, ``dissimilar`` at s = -0.6
+    # and must not. Stacking along the neighbour axis holds for a lone query
+    # and for a batch alike.
+    with_dissimilar = _alpha_query_expansion(
+        query, np.stack([similar, dissimilar], axis=-2), alpha=alpha
+    )
+    without_dissimilar = _alpha_query_expansion(
+        query, similar[..., None, :], alpha=alpha
+    )
+
+    # The control neighbor must actually move the query, otherwise the
+    # equality assertion below is vacuous.
+    assert not np.allclose(without_dissimilar, query)
+
+    assert np.isfinite(with_dissimilar).all()
+    assert np.allclose(with_dissimilar, without_dissimilar, atol=1e-6)
+
+
+@pytest.mark.parametrize(
+    ("query", "neighbours"),
+    [
+        pytest.param(
+            np.array([1.0, 0.0]),
+            np.array([[-1.0, 0.0]]),
+            id="single",
+        ),
+        pytest.param(
+            np.array([[1.0, 0.0], [0.0, 1.0]]),
+            np.array([[[-1.0, 0.0]], [[0.6, -0.8]]]),
+            id="batched",
+        ),
+    ],
+)
+def test_zero_alpha_still_ignores_negative_neighbours(
+    query: np.ndarray, neighbours: np.ndarray
+) -> None:
+    """
+    Consider these steps:
+        * cosine([1, 0], [-1, 0]) = -1
+        * w = max(-1, 0) ** 0 = 0 ** 0 = 1 (NumPy defines 0**0 = 1)
+            => The dissimilar neighbour contributes to the expansion.
+
+    Hence, the clip must not be a plain maximum."""
+    expanded = _alpha_query_expansion(query, neighbours, alpha=0.0)
+    assert np.allclose(expanded, query, atol=1e-6)
+
+
+def test_empty_neighbours_returns_the_normalised_query() -> None:
+    """With no neighbors, the formula simplifies to:
+
+    q' = q / ||q||
+
+    Which is equal the L2-normalised query vector.
+    """
+    expanded = _alpha_query_expansion(np.array([3.0, 4.0]), np.empty((0, 2)), alpha=3.0)
+    assert np.allclose(expanded, [0.6, 0.8], atol=1e-6)
 
 
 def test_unknown_search_index_raises(

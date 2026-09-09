@@ -71,6 +71,19 @@ def test_vectors_are_read_only(flat_index: Any) -> None:
         index.vectors[0, 0] = 1.0
 
 
+def test_vectors_at_reads_the_requested_rows(
+    flat_index: Any, vectors: np.ndarray
+) -> None:
+    """``vectors_at`` hands back the named rows of the gallery, read-only."""
+    index = ExternalSearchIndex.from_faiss_index(flat_index)
+    block = index.vectors_at([4, 1])
+    assert np.allclose(block, vectors[[4, 1]], atol=1e-6)
+    assert not block.flags.writeable
+    for bad_ids in ([], [vectors.shape[0]]):
+        with pytest.raises(ValueError, match="'ids'"):
+            index.vectors_at(bad_ids)
+
+
 def test_search_forwards_to_the_wrapped_index(
     flat_index: Any, vectors: np.ndarray
 ) -> None:

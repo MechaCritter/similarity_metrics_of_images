@@ -179,6 +179,35 @@ def test_both_indexes_store_the_same_gallery(vectors: np.ndarray) -> None:
     )
 
 
+# Reading vectors back by row
+
+
+def test_vectors_at_reads_the_requested_rows(vectors: np.ndarray) -> None:
+    """``vectors_at`` decodes only the named rows, in the given order."""
+    for index in (HnswIndex(vectors), BruteForceIndex(vectors)):
+        block = index.vectors_at(np.array([3, 0, 7]))
+        assert block.shape == (3, vectors.shape[1])
+        assert np.allclose(block, index.vectors[[3, 0, 7]], atol=1e-6)
+        with pytest.raises(ValueError, match="read-only"):
+            block[0, 0] = 1.0
+
+
+def test_vectors_at_accepts_a_plain_list(vectors: np.ndarray) -> None:
+    """The row numbers may be given as any integer sequence."""
+    for index in (HnswIndex(vectors), BruteForceIndex(vectors)):
+        assert np.allclose(index.vectors_at([5]), index.vectors[[5]], atol=1e-6)
+
+
+@pytest.mark.parametrize("ids", [[], [-1], [40], [[0, 1]], [1.5]])
+def test_vectors_at_rejects_rows_outside_the_gallery(
+    vectors: np.ndarray, ids: list[object]
+) -> None:
+    """Row numbers must be integers naming rows of the gallery, at least one."""
+    for index in (HnswIndex(vectors), BruteForceIndex(vectors)):
+        with pytest.raises(ValueError, match="'ids'"):
+            index.vectors_at(ids)  # type: ignore[arg-type]
+
+
 # Searching
 
 

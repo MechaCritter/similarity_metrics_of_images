@@ -9,12 +9,19 @@ construction time.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, cast
 
 import numpy as np
 
 from ...typing import Float32NumpyArray, FloatNumpyArray, IntNumpyArray
-from ._utils import as_gallery_matrix, as_query_matrix, as_read_only, validate_k
+from ._utils import (
+    as_gallery_matrix,
+    as_id_array,
+    as_query_matrix,
+    as_read_only,
+    validate_k,
+)
 
 #: Name reported by an index the caller did not name.
 DEFAULT_EXTERNAL_NAME = "external"
@@ -119,6 +126,19 @@ class ExternalSearchIndex:
     def vectors(self) -> Float32NumpyArray:
         """The ``(N, D)`` gallery matrix the index was built over, read-only."""
         return self._vectors
+
+    def vectors_at(self, ids: Sequence[int] | IntNumpyArray) -> Float32NumpyArray:
+        """
+        Read the gallery vectors stored under the given row numbers.
+
+        :param ids: Gallery row numbers, shape ``(n,)``, at least one.
+        :return: The ``(n, D)`` block of the requested vectors, read-only and in
+            the given order.
+        :raises ValueError: If ``ids`` is empty, not one-dimensional, holds
+            non-integers, or names a row outside the gallery.
+        """
+        rows = as_id_array(ids, len(self))
+        return as_read_only(np.ascontiguousarray(self._vectors[rows]))
 
     @property
     def dim(self) -> int:

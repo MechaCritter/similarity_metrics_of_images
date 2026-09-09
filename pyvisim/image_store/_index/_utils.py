@@ -9,6 +9,7 @@ returns.
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Literal
 
 import numpy as np
@@ -107,6 +108,37 @@ def as_query_matrix(query_vectors: FloatNumpyArray, dim: int) -> Float32NumpyArr
             f"index was built for {dim}."
         )
     return queries
+
+
+def as_id_array(ids: Sequence[int] | IntNumpyArray, num_vectors: int) -> IntNumpyArray:
+    """
+    Shape the row numbers handed to a vector lookup into a validated array.
+
+    :param ids: Gallery row numbers, shape ``(n,)``, at least one.
+    :param num_vectors: Number of vectors the index holds.
+    :return: The row numbers as a contiguous ``intp`` array.
+    :raises ValueError: If ``ids`` is empty, not one-dimensional, holds
+        non-integers, or names a row outside ``[0, num_vectors)``.
+    """
+    rows = np.asarray(ids)
+    if rows.ndim != 1:
+        raise ValueError(
+            f"'ids' must be a 1-D sequence of row numbers, got {rows.ndim} "
+            f"dimension(s)."
+        )
+    if rows.size == 0:
+        raise ValueError("'ids' must name at least one row, got none.")
+    if not np.issubdtype(rows.dtype, np.integer):
+        raise ValueError(
+            f"'ids' must hold integer row numbers, got dtype {rows.dtype}."
+        )
+    lowest, highest = int(rows.min()), int(rows.max())
+    if lowest < 0 or highest >= num_vectors:
+        raise ValueError(
+            f"'ids' must lie in [0, {num_vectors}), got values from {lowest} to "
+            f"{highest}."
+        )
+    return np.ascontiguousarray(rows, dtype=np.intp)
 
 
 def is_explicit_thread_count(num_threads: int) -> bool:

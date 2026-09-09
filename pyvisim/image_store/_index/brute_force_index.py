@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Sequence
 from typing import Any, cast
 
 import numpy as np
@@ -13,6 +14,7 @@ from ._utils import (
     Space,
     as_decoded_gallery,
     as_gallery_matrix,
+    as_id_array,
     as_query_matrix,
     is_explicit_thread_count,
     pad_results,
@@ -76,6 +78,23 @@ class BruteForceIndex(_hnswlib.BFIndex):
         """
         decoded = self.get_items(np.arange(self._num_vectors), return_type="numpy")
         return as_decoded_gallery(decoded)
+
+    def vectors_at(self, ids: Sequence[int] | IntNumpyArray) -> Float32NumpyArray:
+        """
+        Read the gallery vectors stored under the given row numbers.
+
+        Only the requested rows are copied out, which makes a lookup of a few
+        vectors far cheaper than slicing :attr:`vectors`.
+
+        :param ids: Gallery row numbers, shape ``(n,)``, at least one.
+        :return: The ``(n, D)`` block of the requested vectors, read-only and in
+            the given order. In cosine space they come back L2-normalised, the
+            form they were indexed in.
+        :raises ValueError: If ``ids`` is empty, not one-dimensional, holds
+            non-integers, or names a row outside the gallery.
+        """
+        rows = as_id_array(ids, self._num_vectors)
+        return as_decoded_gallery(self.get_items(rows, return_type="numpy"))
 
     def __len__(self) -> int:
         return self._num_vectors

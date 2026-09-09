@@ -67,6 +67,8 @@ Float64NumpyArray = npt.NDArray[np.float64]
 FloatNumpyArray = npt.NDArray[np.floating[Any]]
 #: NumPy array of platform-native signed integers (cluster labels / indices).
 IntNumpyArray = npt.NDArray[np.intp]
+#: Boolean matrix.
+BoolNumpyArray = npt.NDArray[np.bool_]
 
 #: A similarity function: maps two batches of feature vectors of shapes
 #: ``(N, D)`` and ``(M, D)`` to an ``(N, M)`` similarity matrix.

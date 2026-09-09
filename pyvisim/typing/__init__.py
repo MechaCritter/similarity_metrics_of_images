@@ -3,6 +3,7 @@
 from .embedders import Embedder
 from .index import SearchIndex
 from .numeric import (
+    BoolNumpyArray,
     Float32NumpyArray,
     Float64NumpyArray,
     FloatNumpyArray,
@@ -21,6 +22,7 @@ __all__ = [
     "ImageInput",
     "NumpyArray",
     "UInt8NumpyArray",
+    "BoolNumpyArray",
     "Float32NumpyArray",
     "Float64NumpyArray",
     "FloatNumpyArray",
