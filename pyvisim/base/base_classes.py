@@ -80,8 +80,6 @@ class DenseMetricBase(SimilarityMetric, abc.ABC):
 
     Concrete subclasses implement ``_score_pairs``, which receives two stacked
     ``float64`` batches of identical shape and returns one score per pair.
-    :meth:`similarity_score` provides the shared pipeline around it: input
-    normalization, shape validation and memory-bounded pair batching.
 
     :param batch_size: Maximum number of image pairs processed in a single
         batch. Set to ``-1`` to process all images as a single batch.

@@ -1,11 +1,4 @@
-"""
-Vendor-neutral index parameters and their translation to a backend's own.
-
-The indexes take parameters named after what they do rather than after the
-library that implements them. Each index owns one table mapping those names
-onto the keywords its backend actually understands, so a caller's vocabulary
-stays put when the backend behind an index changes: only the table moves.
-"""
+"""Vendor-neutral index parameters and their translation to a backend's own."""
 
 from __future__ import annotations
 

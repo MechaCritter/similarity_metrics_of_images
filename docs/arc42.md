@@ -31,20 +31,22 @@ The abstract bases every public class derives from live in two places:
 ### Serialization uses the safetensors `.embedder` format
 
 Pickling is explicitly avoided out of safety reasons: it mitigates the risk of
-deserializing malicious objects. Arrays are written as binary tensors, and the
-structure plus the scalars travel as one JSON blob in the file metadata, with a
-class-name registry dispatching a file back onto the class that wrote it.
+deserializing malicious objects. Arrays are written as
+[safetensors](https://github.com/huggingface/safetensors), and the structure
+plus the scalars travel as one JSON blob in the file metadata, with a class-name
+registry dispatching a file back onto the class that wrote it.
 
 `torch.save` and `torch.load` still work on the neural networks, as
-conventionally used in PyTorch. They are simply not what `save_to_disk` and
-`load_from_disk` use.
+conventionally used in PyTorch.
 
 ### Heavyweight dependencies are optional and imported lazily
 
 `pyvisim` advertises heavyweight extras without forcing every user to install
-them. An optional import is attempted eagerly, and if the dependency is
-missing, the resulting `ImportError` is captured and only re-raised when the
-dependent code is actually used.
+them by introducing [Optional
+Imports](https://github.com/MechaCritter/Python-Visual-Similarity/blob/main/pyvisim/lazy_import).
+An optional import is attempted eagerly, and if the dependency is missing, the
+resulting `ImportError` is captured and only re-raised when the dependent code
+is actually used.
 
 The classical pipeline still *accepts* torch tensors when torch happens to be
 installed, but it must not depend on torch. `is_tensor` captures that contract:
@@ -52,19 +54,12 @@ it short-circuits to `False` when torch is absent instead of raising.
 
 ### Vendored third-party code stays byte-identical to its source
 
-Files under a `_vendored` folder are copies of their original sources and stay
-unchanged for the rest of their lifetime inside `pyvisim`. Where a change is
-necessary, it goes into a subclass or an overriding method in a separate file,
-and the adaptation is what `pyvisim` maintains.
-
-The provenance of each vendored tree, the file-by-file mapping onto its
-upstream source and the reasons for each adaptation are recorded in the
-`README.md` of the vendored folder itself, which is where
-[the contributing guide](../CONTRIBUTING.md) requires them:
-
-- `pyvisim/image_store/_index/_vendored/README.md` for hnswlib
-- `pyvisim/image_store/_index/_bindings/README.md` for the bindings built on it
-- `pyvisim/features/_vendored/sift/README.md` for the scikit-image SIFT
+Files under a `_vendored` folder are 1-to-1 copies of their original sources and stay
+unchanged for the rest of their lifetime inside `pyvisim` so that, in case of
+changes coming from the upstream, one would only need some text diff tool to
+compare the changes, and simply overwrite the current files with the files from
+the upstream. Where behavior changes are necessary, the developer adds a subclass or an
+overriding method in a separate file.
 
 ## Risks and technical debt
 

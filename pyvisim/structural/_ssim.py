@@ -63,8 +63,6 @@ class SSIM(DenseMetricBase):
     the mean over the whole SSIM map (all channels pooled), matching the
     author's reference implementation. Because every input is normalized to
     the canonical ``[0, 255]`` range, the dynamic range ``L`` is fixed at 255.
-    The window statistics are computed by a compiled multithreaded kernel in
-    ``float32`` precision (scores match a ``float64`` computation to ~1e-5).
 
     Higher values mean more similar: identical images score 1, structurally
     unrelated images score near 0 and inverted structures can go negative.

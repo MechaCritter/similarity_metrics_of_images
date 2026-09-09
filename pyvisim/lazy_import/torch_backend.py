@@ -4,11 +4,6 @@
 (``pip install "pyvisim[nn]"``). It is imported lazily through
 :class:`~pyvisim.lazy_import.OptionalImport` so that pyvisim's classical
 (non-neural) features never require it.
-
-The classical image pipeline still *accepts* torch tensors as input when torch
-happens to be installed, but it must not depend on it. :func:`is_tensor`
-captures that contract: it detects tensors when torch is available and returns
-``False`` otherwise, so callers can branch on it without importing torch.
 """
 
 from __future__ import annotations

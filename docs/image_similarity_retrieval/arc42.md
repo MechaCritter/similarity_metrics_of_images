@@ -1,7 +1,4 @@
-# arc42: image_similarity_retrieval
-
-Software architecture of `pyvisim.image_store`. This document is for developers
-and is not part of the published documentation.
+# arc42: Image Similarity Retrieval
 
 ## Building block view
 
@@ -44,24 +41,16 @@ serialise the decodes behind it.
 Reads only ever hide behind the embedder's own work, which is the ceiling on
 what more threads can buy.
 
-### Alpha query expansion is off by default
-
-Enabling it costs one extra index search per query plus the decoding of
-`expansion_neighbours` gallery vectors, which is a price a caller should opt
-into rather than pay silently. The weights are computed on L2-normalised copies
-whatever `space` the store was built in, because the expansion is defined on
-normalised embeddings ranked by cosine similarity.
-
-### The index vocabulary is pyvisim's, not the backend's
+### Index vocabulary maps pyvisim's names onto the backend's
 
 Index parameters are named after what they do rather than after the library
 that implements the index. Each index owns one table mapping those names onto
 the keywords its backend actually understands, so a caller's vocabulary stays
 put if the backend behind an index ever changes: only the table moves.
 
-### `ExternalSearchIndex` is an adapter, not a dependency
+### `ExternalSearchIndex` adapter allows skipping dependencies
 
-The adapter lets a store search through an index somebody else built, a FAISS
+It lets a store search through an index somebody else built, a FAISS
 index in particular, without this package depending on the library that
 produced it. The consequence is that the scores stay the external index's own:
 an L2 index reports distances, an inner-product index reports similarities, and

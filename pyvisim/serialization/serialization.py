@@ -1,20 +1,4 @@
-"""
-safetensors-backed serialization for image embedders.
-
-An embedder is described by a nested, JSON-safe state dictionary: for the
-classic embedders that is the clustering model, optional PCA, normalization
-hyperparameters, similarity-metric name and feature-extractor configuration;
-for the neural ones it is the architecture description plus the model's
-``state_dict``. This module stores such a description in the
-`safetensors <https://github.com/huggingface/safetensors>`_ format: every
-NumPy array is written as a binary tensor, while the surrounding structure and
-scalar values are stored as a single JSON blob in the file's metadata. The
-objects writing their own ``.embedder`` and ``.safetensors`` files on top of it
-are the ones inheriting :class:`~pyvisim.serialization.SerializerMixin`.
-
-The module also holds the class-name dispatch that turns an embedder into such
-a state dictionary and back.
-"""
+"""safetensors-backed serialization for image embedders."""
 
 from __future__ import annotations
 
