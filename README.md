@@ -93,7 +93,20 @@ image_store = InMemoryImageEmbeddingStore(
     index_params={"graph_degree": 16, "build_candidates": 200},
 )
 
-candidates = image_store.retrieve_top_k_similar(image, k=5)[0] # returns a tuple of (image_path, similarity_score)
+candidates = image_store.retrieve_top_k_similar(image, k=5)[0]  # one Candidate per match
+for candidate in candidates:
+    print(candidate.path, candidate.score)
+```
+
+The `alpha query expansion` and the `k-reciprocal re-ranking`can additionally be used to refine
+the retrieval results, improving `mean Average Precision` (see the
+[documentation](https://mechacritter.github.io/Python-Visual-Similarity/image_retrieval/reranking.html)):
+
+```python
+from pyvisim.image_store import KReciprocalReranker
+
+pool = image_store.retrieve_top_k_similar(image, k=100, query_expansion=True)[0]
+best = KReciprocalReranker(image_store).rerank(pool, top_k=5)
 ```
 
 For more examples, please refer to the [`pyvisim` Examples

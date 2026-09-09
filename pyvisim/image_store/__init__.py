@@ -1,7 +1,9 @@
 """In-memory image embedding storage and retrieval."""
 
 from ._index import BruteForceIndex, ExternalSearchIndex, HnswIndex
-from .image_store import Candidate, InMemoryImageEmbeddingStore
+from .candidate import Candidate
+from .image_store import InMemoryImageEmbeddingStore
+from .reranking import KReciprocalReranker
 
 __all__ = [
     "BruteForceIndex",
@@ -9,4 +11,5 @@ __all__ = [
     "ExternalSearchIndex",
     "HnswIndex",
     "InMemoryImageEmbeddingStore",
+    "KReciprocalReranker",
 ]

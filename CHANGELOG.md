@@ -8,7 +8,7 @@
 > See [CONTRIBUTING.md](CONTRIBUTING.md#release-notes) for more
 information.
 
-## [0.9.3] - ...  # TODO: release date
+## [0.9.3] - 2026-09-09
 
 ### Added
 - Every similarity metric now takes a `batch_size` argument, exposes it as the
@@ -39,6 +39,21 @@ information.
 - `InMemoryImageEmbeddingStore` takes a `num_prefetch_batches` (default `4`)
   controlling how many batches of images the reading threads may run ahead of
   the embedder.
+- `InMemoryImageEmbeddingStore.retrieve_top_k_similar` takes `query_expansion`,
+  `expansion_alpha` and `expansion_neighbours` to refine every query with the
+  alpha query expansion of Radenović et al. (2019) before the final search. It
+  is off by default, since it costs one extra search per query.
+- `KReciprocalReranker` (in `pyvisim.image_store`): re-ranks the candidates of a
+  query with the k-reciprocal encoding of Zhong et al. (2017) through
+  `rerank(candidates, top_k)`, reading their embeddings back from the store.
+- `InMemoryImageEmbeddingStore.embeddings_of(paths)` and `vectors_at(ids)` on
+  every index read a few gallery vectors back without decoding the whole
+  gallery.
+- `Candidate.array` reads the matched image as an RGB `uint8` array on first
+  access and keeps it, and `Candidate.clear_buffer` drops it again.
+- `scripts/benchmark_reranking.py` measures plain retrieval, alpha query
+  expansion and k-reciprocal re-ranking on the Oxford Flower dataset. The
+  results are in the README.
 
 ### Performance
 Building a store over all 6149 train images of the Oxford Flower dataset, before
@@ -92,6 +107,9 @@ image_store = InMemoryImageEmbeddingStore(
 | 2936 s | 2706 s |
 
 ### Changed
+- ⚠️ `Candidate` is a frozen dataclass instead of a named tuple, so it no longer
+  unpacks or indexes: read `candidate.path` and `candidate.score`. It lives in
+  `pyvisim.image_store.candidate` and is still exported from `pyvisim.image_store`.
 - Added backbones resnet34, resnet50, resnet101, resnet152 under
 `pyvisim.neural_networks.backbones`.
 - ⚠️ `HnswIndex` takes `graph_degree`, `build_candidates` and
