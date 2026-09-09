@@ -87,11 +87,9 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
           index is built. If ``hnsw`` is used, the memory consumption is higher
           than when only using ``brute-force``, since the ``hnsw`` index builds an
           additional graph structure based on the embeddings.
-        - The store does not hold the original embeddings. When reading them back
-          using :attr:`embeddings`, the index reads them back out from the index. For
-          **FAISS**-based indexes, the returned embeddings may not be exactly the same
-          as the original embeddings due to compression or quantization, and for some
-          indexes, reconstruction is impossible.
+        - For **FAISS**-based indexes, the returned embeddings may not be
+          exactly the same as the original embeddings due to compression or
+          quantization, and for some indexes, reconstruction is impossible.
 
     :param image_paths: Iterable of image file paths to embed. Duplicates are
         dropped, keeping the first occurrence.
@@ -148,10 +146,6 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
 
     Index parameters
     ----------------
-
-    The parameters are named after what they do rather than after the library
-    implementing the index, so they stay the same if the backend behind an index
-    ever changes.
 
     ``HnswIndex`` parameters
     ~~~~~~~~~~~~~~~~~~~~~~~~

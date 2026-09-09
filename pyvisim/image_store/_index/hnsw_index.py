@@ -33,9 +33,6 @@ class HnswIndex(_hnswlib.Index):
     (how thoroughly the graph is built) and ``search_candidates`` (how wide the
     walk is at query time).
 
-    The graph owns the gallery vectors: they are copied into it at construction
-    time and read back on demand, so no second copy is held.
-
     :param vectors: Gallery embedding vectors, shape ``(N, D)``.
     :param space: Metric space to build the graph for, ``"cosine"``, ``"l2"`` or
         ``"ip"``. In cosine space the vectors are stored L2-normalised.

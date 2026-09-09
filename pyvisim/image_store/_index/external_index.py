@@ -1,11 +1,4 @@
-"""
-Adapter for search indexes built outside of this library.
-
-:class:`ExternalSearchIndex` lets a store search through an index somebody else
-built, a FAISS index in particular, without this package depending on the
-library that produced it. Everything it needs is read off the wrapped object at
-construction time.
-"""
+"""Adapter for search indexes built outside of this library."""
 
 from __future__ import annotations
 

@@ -54,7 +54,7 @@ class TripletNeuralNetwork(BackboneWithHead):
     https://doi.org/10.1109/CVPR.2015.7298682
 
     :param backbone: name of feature-extraction network. See
-        ``https://mechacritter.github.io/Python-Visual-Similarity/docs/sphinx/_build/html/neural_networks/backbones.html``.
+        ``https://mechacritter.github.io/Python-Visual-Similarity/neural_networks/backbones/backbones.html``.
     :param embedding_dim: Dimensionality of the projected embedding space.
     :param similarity_func: Name of the built-in similarity metric used to score
         two embeddings. One of ``"cosine"``, ``"euclidean"``, ``"l1"``

@@ -1,10 +1,4 @@
-"""
-NOTE
-----
-
-Some distance modules are reimplemented using `torch` to preserve gradient flow
-of the loss in the `forward` pass.
-"""
+"""Implements the Triplet Loss."""
 
 import functools
 from collections.abc import Callable

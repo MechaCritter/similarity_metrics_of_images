@@ -1,11 +1,4 @@
-"""Utilities for deferring the import errors of optional dependencies.
-
-This lets :mod:`pyvisim` advertise heavyweight extras (such as
-``transformers``) without forcing every user to install them. The import is
-attempted eagerly, but if the dependency is missing the resulting
-:class:`ImportError` is captured and only re-raised when the dependent code is
-actually used.
-"""
+"""Utilities for deferring the import errors of optional dependencies."""
 
 from __future__ import annotations
 

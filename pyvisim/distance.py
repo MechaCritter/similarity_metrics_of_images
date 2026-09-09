@@ -92,10 +92,7 @@ def cosine_similarity(x: FloatNumpyArray, y: FloatNumpyArray) -> Float64NumpyArr
     Compute the pairwise cosine similarity between two matrices.
 
     The raw inner products are computed with a single matrix product and the
-    row norms are divided out of the ``(N, M)`` result in place, so no
-    normalized copy of either input is ever materialized — the peak extra
-    memory is the result matrix itself, no matter how large the inputs are.
-    Higher values mean more similar.
+    row norms are divided out of the ``(N, M)`` result in place.
 
     :param x: First matrix of shape ``(N, D)``.
     :param y: Second matrix of shape ``(M, D)``.

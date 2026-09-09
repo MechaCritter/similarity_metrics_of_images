@@ -32,9 +32,6 @@ class BruteForceIndex(_hnswlib.BFIndex):
     galleries small enough to scan and the baseline to measure an approximate
     index against.
 
-    The index owns the gallery vectors: they are copied into it at construction
-    time and read back on demand, so no second copy is held.
-
     :param vectors: Gallery embedding vectors, shape ``(N, D)``.
     :param space: Metric space to search in, ``"cosine"``, ``"l2"`` or ``"ip"``.
         In cosine space the vectors are stored L2-normalised.

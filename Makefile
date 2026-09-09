@@ -25,9 +25,9 @@ fmt:
 	uv run --group fmt ruff format .
 
 # Build the Sphinx HTML documentation for local review (same flags as CI);
-# open docs/sphinx/_build/html/index.html afterwards
+# open docs/_build/html/index.html afterwards
 docs:
-	uv run --group docs --extra nn sphinx-build -W -b html docs/sphinx docs/sphinx/_build/html
+	uv run --group docs --extra nn sphinx-build -W -b html docs docs/_build/html
 
 # Create a release note under releasenotes/notes/ for the current change.
 # Usage: make release-note NAME=my-change

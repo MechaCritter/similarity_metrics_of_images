@@ -51,7 +51,7 @@ jobs:
       - name: Fetch the logo from the assets branch
         run: |
           set -euo pipefail
-          dest="docs/sphinx/_static"
+          dest="docs/_static"
           if ! git ls-remote --exit-code --heads origin assets >/dev/null 2>&1; then
             echo "::warning::No assets branch yet. The docs build without a logo."
             exit 0
@@ -67,7 +67,7 @@ jobs:
           echo "Copied $(find "$dest" -name '*.png' | wc -l) logo file(s)."
 
       - name: Build HTML documentation
-        run: uv run --group docs sphinx-build -W -b html docs/sphinx docs/sphinx/_build/html
+        run: uv run --group docs sphinx-build -W -b html docs docs/_build/html
 
       # The 'Benchmarks' workflow publishes them under 'benchmark/' on the
       # orphan 'assets' branch, and they are overlaid here so the absolute
@@ -75,7 +75,7 @@ jobs:
       - name: Overlay benchmark barplots from the assets branch
         run: |
           set -euo pipefail
-          dest="docs/sphinx/_build/html/benchmarks"
+          dest="docs/_build/html/benchmarks"
           if git ls-remote --exit-code --heads origin assets >/dev/null 2>&1; then
             git fetch --depth=1 origin assets
             if ! git ls-tree --name-only FETCH_HEAD benchmark | grep -q .; then
@@ -98,7 +98,7 @@ jobs:
       - name: Upload documentation artifact
         uses: actions/upload-pages-artifact@v5
         with:
-          path: docs/sphinx/_build/html
+          path: docs/_build/html
 
   deploy:
     # 2. Deploy the built HTML to GitHub Pages

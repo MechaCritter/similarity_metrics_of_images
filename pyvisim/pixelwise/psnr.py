@@ -88,9 +88,8 @@ class PSNR(SimilarityMetric):
     ``(N, M)`` matrix of PSNR values in decibels. Every compared pair must
     share the same ``(H, W[, C])`` shape.
 
-    The squared differences are summed by a compiled OpenMP kernel with a
-    team of four threads by default; set the ``PYVISIM_NUM_THREADS``
-    environment variable to override the team size.
+    The squared differences are summed by a compiled OpenMP kernel. Set the
+    ``PYVISIM_NUM_THREADS`` environment variable to override the team size.
 
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.

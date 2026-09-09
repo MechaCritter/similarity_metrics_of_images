@@ -45,15 +45,7 @@ class KReciprocalReranker:
     much their neighbourhoods agree. The final distance the candidates are
     re-ranked by mixes that Jaccard distance with the original one.
 
-    The distances among the candidates are computed from their embeddings,
-    which the reranker reads back from the store's index, in the store's
-    ``space``. The query's distances to the candidates are the scores the store
-    ranked them by, so the candidates must come from the given store.
-
-    :param store: The store the candidates were retrieved from. It must search
-        through one of the built-in indexes: an
-        :class:`~pyvisim.image_store.ExternalSearchIndex` reports whatever its
-        own metric produces, so the reranker cannot tell what its scores mean.
+    :param store: The store the candidates were retrieved from.
     :param k1: Size of the neighbourhoods the k-reciprocal sets are built
         from. Defaults to ``20`` as in [1].
     :param k2: Size of the neighbourhood the local query expansion averages

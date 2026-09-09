@@ -67,7 +67,6 @@ instance/
 
 # Sphinx documentation
 docs/_build/
-docs/sphinx/_build/
 
 # PyBuilder
 .pybuilder/
@@ -168,7 +167,9 @@ uv.lock
 
 # Folders specific to this project
 excavator_dataset_w_masks/
-oxford_flower_dataset/
+# Anchored: a local copy of the dataset lands at the repository root, while
+# docs/dataset/oxford_flower_dataset/ is the documentation of the class.
+/oxford_flower_dataset/
 data/
 logs/
 test_notebooks/
@@ -192,4 +193,4 @@ docs/*/benchmarks/*.png
 docs/*/benchmarks/*.json
 
 # Logo files pulled from the 'assets' branch at documentation build time
-docs/sphinx/_static/*.png
+docs/_static/*.png
