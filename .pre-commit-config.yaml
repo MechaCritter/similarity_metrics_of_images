@@ -38,6 +38,18 @@ repos:
         additional_dependencies:
           - tomli
 
+  - repo: local
+    hooks:
+      # Release notes render as reStructuredText: inline code needs double
+      # backticks. The 'Check Release Notes' workflow rejects Markdown
+      # backticks, this hook repairs them first.
+      - id: release-note-backticks
+        name: release-note-backticks
+        language: python
+        entry: python scripts/release_note_backticks.py
+        files: '^releasenotes/notes/.*\.yaml$'
+        types: [text]
+
   - repo: https://github.com/rhysd/actionlint
     rev: v1.7.10
     hooks:
