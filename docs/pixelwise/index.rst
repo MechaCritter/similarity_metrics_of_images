@@ -1,14 +1,11 @@
 Pixelwise
 =========
 
-.. include:: README.md
-   :parser: myst_parser.sphinx_
-   :start-line: 1
+Contains :doc:`PSNR <psnr/psnr>`, which compares two images pixel by pixel
+rather than through an intermediate vector embedding.
 
-API reference
--------------
+.. toctree::
+   :maxdepth: 1
+   :hidden:
 
-.. autoclass:: pyvisim.pixelwise.PSNR
-   :members:
-   :inherited-members:
-   :show-inheritance:
+   psnr/psnr

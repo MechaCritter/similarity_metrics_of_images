@@ -1,19 +1,24 @@
 Structural
 ==========
 
-.. include:: README.md
-   :parser: myst_parser.sphinx_
-   :start-line: 1
+Contains the metrics :doc:`SSIM <ssim/ssim>` and
+:doc:`MSSSIM <ms_ssim/ms_ssim>`, which captures the perceptual similarity of
+two images. It is used, for example, to test out the quality of image
+compression or denoising algorithms.
 
-API reference
--------------
+.. code-block:: python
 
-.. autoclass:: pyvisim.structural.SSIM
-   :members:
-   :inherited-members:
-   :show-inheritance:
+   from pyvisim.structural import MSSSIM, SSIM
 
-.. autoclass:: pyvisim.structural.MSSSIM
-   :members:
-   :inherited-members:
-   :show-inheritance:
+   ssim = SSIM()
+   scores = ssim.similarity_score(image1, image2)       # (1, 1) matrix
+
+   msssim = MSSSIM(batch_size=16)
+   matrix = msssim.similarity_score(gallery, queries)   # (N, M) matrix
+
+.. toctree::
+   :maxdepth: 1
+   :hidden:
+
+   ssim/ssim
+   ms_ssim/ms_ssim
