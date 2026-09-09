@@ -167,7 +167,9 @@ uv.lock
 
 # Folders specific to this project
 excavator_dataset_w_masks/
-oxford_flower_dataset/
+# Anchored: a local copy of the dataset lands at the repository root, while
+# docs/dataset/oxford_flower_dataset/ is the documentation of the class.
+/oxford_flower_dataset/
 data/
 logs/
 test_notebooks/
