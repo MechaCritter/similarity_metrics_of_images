@@ -1,5 +1,13 @@
 # Changelog
 
+> [!NOTE]
+> This file is frozen. It documents releases up to and including `0.9.3`.
+> Release notes for later versions are managed with
+> [reno](https://docs.openstack.org/reno/latest/) and published on the
+> [GitHub Releases page](https://github.com/MechaCritter/Python-Visual-Similarity/releases).
+> See [CONTRIBUTING.md](CONTRIBUTING.md#release-notes) for more
+information.
+
 ## [0.9.3] - 2026-09-09
 
 ### Added
@@ -98,11 +106,6 @@ image_store = InMemoryImageEmbeddingStore(
 |---|---|
 | 2936 s | 2706 s |
 
-### Removed
-- ⚠️ `DeepConvFeature` no longer appends normalized `(x, y)` coordinates to its
-  descriptors: the `spatial_embedding` argument is gone and `output_dim` is now
-  the channel count of the selected conv layer.
-
 ### Changed
 - ⚠️ `Candidate` is a frozen dataclass instead of a named tuple, so it no longer
   unpacks or indexes: read `candidate.path` and `candidate.score`. It lives in
@@ -127,6 +130,9 @@ image_store = InMemoryImageEmbeddingStore(
   written by an earlier release cannot be loaded by this one.
 
 ### Removed
+- ⚠️ `DeepConvFeature` no longer appends normalized `(x, y)` coordinates to its
+  descriptors: the `spatial_embedding` argument is gone and `output_dim` is now
+  the channel count of the selected conv layer.
 - ⚠️ `pyvisim.serialization.save_embedder_state` and `load_embedder_state`.
   They only called `save_state`/`load_state` with the embedder metadata key,
   which is now exported as `EMBEDDER_METADATA_KEY`.

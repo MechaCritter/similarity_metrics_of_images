@@ -1,0 +1,17 @@
+---
+highlights: >
+    Release notes are now managed with reno. Every contributor adds a note for
+    the change they are making in the same pull request that carries the code,
+    and the notes of a release are published as the body of its GitHub Release.
+upgrade:
+  - |
+    Contributors need the new ``release`` dependency group to add a release
+    note. Run ``uv sync --group release`` to install it, then create a note
+    with ``make release-note NAME=my-change``. A pull request touching library
+    code that carries no note fails the ``Check Release Notes`` job.
+enhancements:
+  - |
+    ``CHANGELOG.md`` is frozen at ``0.9.3`` and is no longer updated. It stays
+    in the repository as the record of every release up to that point. Notes
+    for later releases live in ``releasenotes/notes`` and are rendered onto the
+    GitHub Releases page.

@@ -1,0 +1,77 @@
+# .github/workflows/github_release.yml
+#
+# Aggregates the reno release notes of a version tag into the body of its
+# GitHub Release. Runs alongside 'publish_pypi.yml' on the same tag push,
+# independently of it.
+
+name: Project release on GitHub
+
+on:
+  push:
+    tags:
+      - "v[0-9]+.[0-9]+.[0-9]+*"
+  workflow_dispatch:   # regenerate a release page without pushing a new tag
+
+permissions:
+  contents: read
+
+jobs:
+  generate-notes:
+    name: "Generate release notes"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # ncipollo/release-action creates the GitHub release
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+          fetch-tags: true
+          fetch-depth: 0   # slow but needed by reno
+
+      - name: "Install uv"
+        uses: astral-sh/setup-uv@v10.0.1
+        with:
+          enable-cache: true
+          cache-dependency-glob: "pyproject.toml"
+
+      # On a tag push the tag is the ref. A manual run sits on a branch
+      # instead, so fall back to the most recent version tag.
+      - name: "Resolve the release tag"
+        id: release-tag
+        run: |
+          set -euo pipefail
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]
+          then
+            tag="$(git describe --tags --abbrev=0 --match 'v[0-9]*.[0-9]*.[0-9]*')"
+          else
+            tag="${{ github.ref_name }}"
+          fi
+          echo "Releasing notes for ${tag}"
+          echo "tag=${tag}" >> "$GITHUB_OUTPUT"
+
+      # '--version' scopes the report to the tag being released, so the body
+      # holds the notes of this release only.
+      - name: "Generate release notes"
+        env:
+          RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
+        run: |
+          uvx --from 'reno<5' --with 'dulwich>=0.21.0,<1.0.0' \
+            reno report --no-show-source --ignore-cache \
+            --version "$RELEASE_TAG" -o relnotes.rst
+
+      - name: "Convert to Markdown"
+        uses: docker://pandoc/core:3.8@sha256:c7127705b9d84c1b4acbbe411a86e3a6d67ac57870654dc378b6fe636ab747df
+        with:
+          args: "--from rst --to gfm --syntax-highlighting=none --wrap=none relnotes.rst -o relnotes.md"
+
+      - name: "Show the generated notes"
+        run: cat relnotes.md
+
+      - name: "Create the GitHub release"
+        uses: ncipollo/release-action@339a81892b84b4eeb0f6e744e4574d79d0d9b8dd # v1.21.0
+        with:
+          tag: ${{ steps.release-tag.outputs.tag }}
+          bodyFile: "relnotes.md"
+          allowUpdates: true

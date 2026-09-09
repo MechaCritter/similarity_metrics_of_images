@@ -1,0 +1,34 @@
+# Counterpart of 'release_notes.yml'. Both declare the same workflow name and
+# the same job id, and their path filters are exact complements, so that
+# 'Check Release Notes' reports on every pull request and can therefore be
+# marked a required status check. This one runs when the real check does not.
+
+name: Check Release Notes
+
+on:
+  pull_request:
+    types:
+      - opened
+      - reopened
+      - synchronize
+      - ready_for_review
+      - labeled
+      - unlabeled
+    paths-ignore:
+      - "**.py"
+      - "**.pyx"
+      - "pyproject.toml"
+      - "!.github/**/*.py"
+      - "!scripts/**/*.py"
+      - "releasenotes/notes/*.yaml"
+
+permissions:
+  contents: read
+
+jobs:
+  reno:
+    name: "Check release notes"
+    runs-on: ubuntu-latest
+    steps:
+      - name: Skip mandatory job
+        run: echo "Skipped!"

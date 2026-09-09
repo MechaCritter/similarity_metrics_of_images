@@ -1,4 +1,4 @@
-.PHONY: test-types test-unit fmt docs
+.PHONY: test-types test-unit test-slow build-ext fmt docs release-note release-notes
 
 # Regenerate the checked-in Cython C sources and rebuild the editable install.
 # --inexact keeps ad-hoc packages in the venv from being pruned.
@@ -28,3 +28,14 @@ fmt:
 # open docs/sphinx/_build/html/index.html afterwards
 docs:
 	uv run --group docs --extra nn sphinx-build -W -b html docs/sphinx docs/sphinx/_build/html
+
+# Create a release note under releasenotes/notes/ for the current change.
+# Usage: make release-note NAME=my-change
+release-note:
+	@test -n "$(NAME)" || echo "Usage: make release-note NAME=my-change" >&2
+	@test -n "$(NAME)"
+	uv run --group release reno new $(NAME)
+
+# Render the accumulated release notes for local review
+release-notes:
+	uv run --group release reno report --no-show-source --ignore-cache

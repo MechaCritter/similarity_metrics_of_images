@@ -124,6 +124,11 @@ bench = [
     "ipykernel",
     "psutil",
 ]
+# Release note management (reno). dulwich is reno's git backend.
+release = [
+    "reno<5",
+    "dulwich>=0.21.0,<1.0.0",
+]
 
 # Per-platform wheel builds for the compiled extensions, run by the publish
 # workflow (.github/workflows/publish_pypi.yml) via cibuildwheel.
