@@ -23,3 +23,9 @@ A Python library for image similarity analysis and retrieval.
    pixelwise/index
    typing/index
    eval/index
+
+.. toctree::
+   :maxdepth: 2
+   :caption: Tutorials
+
+   tutorials/tutorial
