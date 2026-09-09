@@ -59,7 +59,7 @@ class BCESiameseNetwork(BackboneWithHead):
 
     :param backbone: name of feature-extraction network. Default: ``"resnet18"``.
         See
-        ``https://mechacritter.github.io/Python-Visual-Similarity/docs/sphinx/_build/html/neural_networks/backbones.html``.
+        ``https://mechacritter.github.io/Python-Visual-Similarity/neural_networks/backbones/backbones.html``.
     :param embedding_dim: Dimensionality of the twin feature vectors that the
         scoring layer compares.
     :param transform: processing transform applied to every input image. If

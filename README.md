@@ -51,11 +51,11 @@ attempts to close this gap by implementing as many metrics as possible using onl
 ### Accelerated Computation
 
 **Cython** kernels and **C++ libraries** are used for some metrics to accelerate computation significantly compared
-to all reference libraries on the CPU. See, for example, [benchmark results of the `SSIM` implementation](docs/structural/README.md#benchmarking).
+to all reference libraries on the CPU. See, for example, [benchmark results of the `SSIM` implementation](docs/structural/ssim/benchmark.md).
 
 ### Examples
 
-#### `Structural Similarity` (see documentation [here](https://mechacritter.github.io/Python-Visual-Similarity/structural/index.html)):
+#### `Structural Similarity` (see documentation [here](https://mechacritter.github.io/Python-Visual-Similarity/structural/ssim/ssim.html)):
 
 ```python
 from pyvisim.structural import SSIM
@@ -65,7 +65,7 @@ similarity_score = ssim.similarity_score(image1, image2)
 print(f"Similarity Score: {similarity_score}")
 ```
 
-#### One-Shot similarity computation using the `CLIPEmbedder`(see documentation [here](https://mechacritter.github.io/Python-Visual-Similarity/neural_networks/clip.html)):
+#### One-Shot similarity computation using the `CLIPEmbedder`(see documentation [here](https://mechacritter.github.io/Python-Visual-Similarity/neural_networks/clip/clip.html)):
 
 ```python
 from pyvisim.neural_networks import ClipEmbedder
@@ -78,7 +78,7 @@ similarity_score = embedder.similarity_score(image1, image2)
 print(f"Similarity Score: {similarity_score}")
 ```
 
-#### `Image retrieval` (see documentation [here](https://mechacritter.github.io/Python-Visual-Similarity/image_retrieval/image_store.html)):
+#### `Image retrieval` (see documentation [here](https://mechacritter.github.io/Python-Visual-Similarity/image_similarity_retrieval/image_store/image_store.html)):
 
 ```python
 from pyvisim.neural_networks import ClipEmbedder
@@ -100,7 +100,7 @@ for candidate in candidates:
 
 The `alpha query expansion` and the `k-reciprocal re-ranking`can additionally be used to refine
 the retrieval results, improving `mean Average Precision` (see the
-[documentation](https://mechacritter.github.io/Python-Visual-Similarity/image_retrieval/reranking.html)):
+[documentation](https://mechacritter.github.io/Python-Visual-Similarity/image_similarity_retrieval/reranking/reranking.html)):
 
 ```python
 from pyvisim.image_store import KReciprocalReranker
@@ -129,7 +129,7 @@ pip install "pyvisim[nn]"
 
 All experiments in this project was made on the Oxford Flower Dataset
 <ref>[7]</ref>, for which I have created a custom dataset class. For
-more details on the dataset, please refer to the [documentation](pyvisim/datasets/README.md).
+more details on the dataset, please refer to the [documentation](https://mechacritter.github.io/Python-Visual-Similarity/dataset/oxford_flower_dataset/oxford_flower_dataset.html).
 
 ## Contributing
 

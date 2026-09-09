@@ -33,9 +33,9 @@ class FisherVectorEmbedder(ClusteringBasedEmbedder):
     :param feature_extractor: Feature extractor instance. Default is RootSIFT
     :param n_components: Number of Gaussian mixture components (visual words) to use.
     :param gmm_params: Arguments for Gaussian Mixture Model during vocabulary learning. See
-        ``https://github.com/MechaCritter/Python-Visual-Similarity/blob/main/docs/classic/fisher_vector.md#gmm-parameters``.
+        ``https://mechacritter.github.io/Python-Visual-Similarity/classic/fisher_vector/fisher_vector.html#gmm-parameters-gmm-params``.
     :param pca_params: Arguments for the Principal Component Analysis during vocabulary learning. See
-        ``https://github.com/MechaCritter/Python-Visual-Similarity/blob/main/docs/classic/pca.md#parameters``.
+        ``https://mechacritter.github.io/Python-Visual-Similarity/classic/pca/pca.html#parameters-pca-params``.
     :param power_norm_weight: Exponent for power normalization
     :param norm_order: Norm order for normalization (default: 2).
     :param epsilon: Small constant to avoid division by zero.

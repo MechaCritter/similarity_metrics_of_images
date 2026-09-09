@@ -61,9 +61,9 @@ class VLADEmbedder(ClusteringBasedEmbedder):
         Defaults to RootSIFT.
     :param n_clusters: Number of K-Means clusters (visual words) to use.
     :param kmeans_params: Arguments for K-Means during vocabulary learning. See
-        ``https://github.com/MechaCritter/Python-Visual-Similarity/blob/main/docs/classic/vlad.md#k-means-parameters``.
+        ``https://mechacritter.github.io/Python-Visual-Similarity/classic/vlad/vlad.html#k-means-parameters-kmeans-params``.
     :param pca_params: Arguments for the Principal Component Analysis during vocabulary learning. See
-        ``https://github.com/MechaCritter/Python-Visual-Similarity/blob/main/docs/classic/pca.md#parameters``.
+        ``https://mechacritter.github.io/Python-Visual-Similarity/classic/pca/pca.html#parameters-pca-params``.
     :param power_norm_weight: Exponent for power normalization
     :param power_norm_weight: Exponent for power normalization
     :param norm_order: Norm order for normalization (default: 2).
