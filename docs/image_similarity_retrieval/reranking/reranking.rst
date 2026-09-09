@@ -18,8 +18,9 @@ their neighbourhoods agree. The candidates are finally re-ranked by
 is the distance the store ranked them by.
 
 The candidates must come from the store that is passed to the reranker, and a
-store on an ``ExternalSearchIndex`` is rejected. See
-``docs/image_similarity_retrieval/arc42.md`` for the reasoning.
+store on an ``ExternalSearchIndex`` is rejected. For more technical
+information, visit
+https://github.com/MechaCritter/Python-Visual-Similarity/blob/main/docs/image_similarity_retrieval/arc42.md.
 
 Reranking algorithm
 ~~~~~~~~~~~~~~~~~~~

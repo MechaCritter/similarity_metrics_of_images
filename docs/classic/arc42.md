@@ -24,3 +24,24 @@ its own.
 The clustering models are internal (`pyvisim.classic._clustering`), so their
 parameters reach a caller only as the `pca_params`, `kmeans_params` and
 `gmm_params` dictionaries the embedders forward.
+
+## Architecture decisions
+
+### The PCA solver is picked from the training shape
+
+`svd_solver="auto"` chooses at fit time: `"covariance_eigh"` when
+`n_features <= 1000` and `n_samples >= 10 * n_features`, otherwise `"full"`
+when `max(n_samples, n_features) <= 500`, otherwise `"arpack"` when
+`n_components < 0.8 * min(n_samples, n_features)`, and `"full"` otherwise.
+
+Component signs are made deterministic by flipping each component so that its
+largest-magnitude entry is positive, which is what makes the output of the four
+solvers comparable.
+
+### Serialization preserves the memory order of fitted arrays
+
+Some fitted attributes are stored Fortran-contiguous, and the matrix-product
+code path differs by layout, so rebuilding such an array in C order would not
+reproduce the exact same floating-point results. The serializer therefore
+records the order and restores it, which is what keeps a round-tripped embedder
+bit-for-bit reproducible.

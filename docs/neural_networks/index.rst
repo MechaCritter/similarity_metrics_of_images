@@ -29,7 +29,8 @@ Serialization
 Every class in this module can be serialized via method ``to_dict`` and
 deserialized via ``from_dict``, or ``save_to_disk`` and ``load_from_disk`` to
 save/load to/from a file. ``pyvisim`` only uses ``safetensors`` format for
-(de)serialization. See ``docs/arc42.md`` for why.
+(de)serialization. For more technical information, visit
+https://github.com/MechaCritter/Python-Visual-Similarity/blob/main/docs/arc42.md.
 
 You can, of course, also use ``torch.save`` and ``torch.load`` as
 conventionally used in PyTorch.
