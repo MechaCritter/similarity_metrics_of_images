@@ -201,9 +201,10 @@ def test_l2_store_keeps_the_raw_embeddings(
     gallery_paths: list[str], learned_vlad_embedder: VLADEmbedder
 ) -> None:
     """An L2 store indexes the vectors as the embedder produced them."""
-    store = InMemoryImageEmbeddingStore(
-        gallery_paths[:6], learned_vlad_embedder, space="l2"
+    embedder = VLADEmbedder.from_dict(
+        {**learned_vlad_embedder.to_dict(), "normalize": False}
     )
+    store = InMemoryImageEmbeddingStore(gallery_paths[:6], embedder, space="l2")
     norms = np.linalg.norm(store.embeddings, axis=1)
     assert not np.allclose(norms, 1.0, atol=1e-3)
 

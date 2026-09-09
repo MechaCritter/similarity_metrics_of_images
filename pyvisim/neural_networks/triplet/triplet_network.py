@@ -66,6 +66,7 @@ class TripletNeuralNetwork(BackboneWithHead):
     :param pretrained_backbone: Whether to use a backbone pretrained on
         ImageNet. If you are loading the ``TripletNeuralNetwork`` from a
         checkpoint, set this to ``False`` to avoid downloading the weights again.
+    :param normalize: Whether ``embed`` L2-normalizes the embeddings it returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
     :raises ValueError: If ``embedding_dim`` is not a positive integer, if
@@ -82,6 +83,7 @@ class TripletNeuralNetwork(BackboneWithHead):
         device: str | torch.device = "cpu",
         pretrained_backbone: bool = True,
         *,
+        normalize: bool = True,
         batch_size: int = 16,
     ):
         super().__init__(
@@ -90,6 +92,7 @@ class TripletNeuralNetwork(BackboneWithHead):
             transform=transform,
             pretrained_backbone=pretrained_backbone,
             similarity_func=similarity_func,
+            normalize=normalize,
             batch_size=batch_size,
         )
         self.to(torch.device(device))

@@ -2,7 +2,7 @@ import abc
 import logging
 import pathlib
 from collections.abc import Sequence
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import numpy as np
 
@@ -18,6 +18,23 @@ from .typing import (
 
 #: Suffix of the files written by :meth:`SerializableImageEmbedder.save_to_disk`.
 EMBEDDER_FILE_SUFFIX = ".embedder"
+
+
+def _l2_normalize(vectors: FloatNumpyArray) -> FloatNumpyArray:
+    """
+    Scales every row of ``vectors`` to unit L2 length.
+
+    A row of length zero carries no direction to preserve and is left as it is
+    instead of being divided by zero.
+
+    :param vectors: An ``(N, D)`` array of embeddings.
+    :return: An ``(N, D)`` array whose non-zero rows have unit L2 norm.
+    """
+    norms = np.linalg.norm(vectors, axis=-1, keepdims=True)
+    return cast(
+        FloatNumpyArray,
+        np.divide(vectors, norms, out=vectors.copy(), where=norms > 0),
+    )
 
 
 class SimilarityMetric(abc.ABC):
@@ -218,16 +235,43 @@ class ImageEmbedderBase(SimilarityMetric):
 
     :param similarity_func: Name of the built-in similarity metric to use. One of
         ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
+    :param normalize: Whether :meth:`embed` L2-normalizes the embeddings it
+        returns, so that they can be compared directly with a dot product.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
+    :raises ValueError: If ``similarity_func`` is not a supported similarity
+        metric, ``normalize`` is not a boolean, or ``batch_size`` is neither
+        ``-1`` nor a positive integer.
     """
 
-    def __init__(self, similarity_func: str = "cosine", *, batch_size: int = 16):
+    def __init__(
+        self,
+        similarity_func: str = "cosine",
+        *,
+        normalize: bool = True,
+        batch_size: int = 16,
+    ):
         # Set important attributes via setters to trigger error handling
         super().__init__(batch_size=batch_size)
         self._similarity_func: SimilarityFunc
         self._similarity_func_name: str
+        self._normalize: bool
         self.similarity_func = similarity_func
+        self.normalize = normalize
+
+    @property
+    def normalize(self) -> bool:
+        """Whether the embeddings returned by :meth:`embed` are L2-normalized."""
+        return self._normalize
+
+    @normalize.setter
+    def normalize(self, normalize: bool) -> None:
+        """Sets whether :meth:`embed` L2-normalizes the embeddings it returns."""
+        if not isinstance(normalize, bool):
+            raise ValueError(
+                f"normalize must be a boolean, got {type(normalize).__name__}."
+            )
+        self._normalize = normalize
 
     @property
     def similarity_func(self) -> SimilarityFunc:
@@ -251,7 +295,6 @@ class ImageEmbedderBase(SimilarityMetric):
         """The name of the configured similarity metric (e.g. ``"cosine"``)."""
         return self._similarity_func_name
 
-    @abc.abstractmethod
     def embed(
         self,
         images: ImageInput,
@@ -265,7 +308,8 @@ class ImageEmbedderBase(SimilarityMetric):
         Each image is normalized to a canonical ``uint8`` ``(H, W, C)`` array
         before feature extraction, so NumPy arrays, torch tensors and other
         array-like inputs are all accepted. When a batch axis is present (via
-        ``dims``), every image in the batch is embedded.
+        ``dims``), every image in the batch is embedded. The resulting vectors
+        are L2-normalized row by row when :attr:`normalize` is True.
 
         :param images: A single ``MatLike`` image, a batched array, or an
             iterable of images. Consider using an iterator for large datasets.
@@ -278,7 +322,37 @@ class ImageEmbedderBase(SimilarityMetric):
             See :mod:`pyvisim.typing`.
         :param value_range: The ``(low, high)`` range the input values live in;
             converted into the canonical ``[0, 255]`` range.
-        :return: vector representations of the given images
+        :return: vector representations of the given images, L2-normalized
+            row by row if :attr:`normalize` is True.
+        """
+        vectors = self._embed(images, dims=dims, value_range=value_range)
+        return _l2_normalize(vectors) if self._normalize else vectors
+
+    @abc.abstractmethod
+    def _embed(
+        self,
+        images: ImageInput,
+        *,
+        dims: str = "HWC",
+        value_range: tuple[float, float] = (0.0, 255.0),
+    ) -> FloatNumpyArray:
+        """
+        Embeds one or more images, without the L2 normalization.
+
+        Every subclass has to implement this method.
+
+        :param images: A single ``MatLike`` image, a batched array, or an
+            iterable of images. Consider using an iterator for large datasets.
+        :param dims: Axis-label string, one character per array axis in order:
+            ``"H"`` = height (rows), ``"W"`` = width (columns), ``"C"`` = channels
+            (e.g. RGB), ``"B"`` = batch size. For example, ``"HWC"`` is height ×
+            width × channels (NumPy/OpenCV single-image layout, **default**);
+            ``"CHW"`` is channels × height × width (PyTorch single-image layout);
+            ``"BCHW"`` is batch × channels × height × width (PyTorch batched layout).
+            See :mod:`pyvisim.typing`.
+        :param value_range: The ``(low, high)`` range the input values live in;
+            converted into the canonical ``[0, 255]`` range.
+        :return: vector representations of the given images without L2 normalization.
         """
         raise NotImplementedError
 
@@ -316,6 +390,8 @@ class SerializableImageEmbedder(ImageEmbedderBase, SerializerMixin):
 
     :param similarity_func: Name of the built-in similarity metric to use. One of
         ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
+    :param normalize: Whether :meth:`embed` L2-normalizes the embeddings it
+        returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
     """
@@ -327,7 +403,7 @@ class SerializableImageEmbedder(ImageEmbedderBase, SerializerMixin):
     #: Keys a serialised state must contain to be a valid embedder file.
     #: Subclasses extend this with their own required keys.
     _STATE_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"embedder_class", "similarity_func", "batch_size"}
+        {"embedder_class", "similarity_func", "normalize", "batch_size"}
     )
 
     def _restore_batch_size(self, state: dict[str, Any]) -> None:
@@ -340,6 +416,16 @@ class SerializableImageEmbedder(ImageEmbedderBase, SerializerMixin):
             positive integer.
         """
         self.set_batch_size(state["batch_size"])
+
+    def _restore_normalize(self, state: dict[str, Any]) -> None:
+        """
+        Adopts the normalization setting recorded in a serialised state.
+
+        :param state: A JSON-safe embedder description.
+        :raises KeyError: If the state carries no normalization setting.
+        :raises ValueError: If the stored setting is not a boolean.
+        """
+        self.normalize = state["normalize"]
 
     @classmethod
     def _read_state(cls, path: pathlib.Path) -> dict[str, Any]:

@@ -20,12 +20,17 @@ from ._clustering import PCA, ClusteringModelBase
 
 setup_logging()
 
-_CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION = 2
+_CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION = 3
 _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION_COMPATIBILITY: dict[tuple[int, int], bool] = {
     # Version 2 adds the "batch_size" key, which version 1 ignores but version 2
     # requires, so the compatibility only holds in one direction.
     (1, 2): True,  # version 1 can read files from version 2
     (2, 1): False,  # version 2 cannot read files from version 1
+    # Version 3 adds the "normalize" key the same way.
+    (1, 3): True,  # version 1 can read files from version 3
+    (2, 3): True,  # version 2 can read files from version 3
+    (3, 1): False,  # version 3 cannot read files from version 1
+    (3, 2): False,  # version 3 cannot read files from version 2
     #
     # TODO: when the next _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION comes, check if
     # it's forward / backward compatible, then add entries like the ones above.
@@ -43,6 +48,7 @@ class FeatureBasedEmbedder(SerializableImageEmbedder):
         ``__call__``). Defaults to :class:`~pyvisim.features.RootSIFT`.
     :param similarity_func: Name of the built-in similarity metric to use. One of
         ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
+    :param normalize: Whether ``embed`` L2-normalizes the embeddings it returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
     """
@@ -52,10 +58,15 @@ class FeatureBasedEmbedder(SerializableImageEmbedder):
         feature_extractor: FeatureExtractorBase | None = None,
         similarity_func: str = "cosine",
         *,
+        normalize: bool = True,
         batch_size: int = 16,
     ):
         self._feature_extractor: FeatureExtractorBase
-        super().__init__(similarity_func=similarity_func, batch_size=batch_size)
+        super().__init__(
+            similarity_func=similarity_func,
+            normalize=normalize,
+            batch_size=batch_size,
+        )
         self.feature_extractor = (
             feature_extractor if feature_extractor is not None else RootSIFT()
         )
@@ -110,6 +121,7 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
     it from the ``pca_params`` dictionary passed to their constructors.
     :param raise_error_when_pca_incompatible: When set to True, if the new clustering model has a different input size
                                         than the PCA model's output size, an Error will be raised
+    :param normalize: Whether ``embed`` L2-normalizes the embeddings it returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
     """
@@ -128,6 +140,7 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
             "flatten",
             "raise_error_when_pca_incompatible",
             "similarity_func",
+            "normalize",
             "batch_size",
             "feature_extractor",
         }
@@ -145,6 +158,7 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
         pca: PCA | None = None,
         raise_error_when_pca_incompatible: bool = True,
         *,
+        normalize: bool = True,
         batch_size: int = 16,
     ):
         # Set important attributes via setters to trigger error handling
@@ -162,6 +176,7 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
         super().__init__(
             feature_extractor=feature_extractor,
             similarity_func=similarity_func,
+            normalize=normalize,
             batch_size=batch_size,
         )
 
@@ -444,6 +459,7 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
             "flatten": self.flatten,
             "raise_error_when_pca_incompatible": self.raise_error_when_pca_incompatible,
             "similarity_func": self._similarity_func_name,
+            "normalize": self.normalize,
             "batch_size": self.batch_size,
             "feature_extractor": self._feature_extractor.to_dict(),
         }
@@ -464,6 +480,7 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
                 "raise_error_when_pca_incompatible"
             ],
         )
+        embedder._restore_normalize(state)
         embedder._restore_batch_size(state)
         if state["pca"] is not None:
             embedder._set_pca(PCA.from_dict(state["pca"]))

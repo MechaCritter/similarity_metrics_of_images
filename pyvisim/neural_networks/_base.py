@@ -7,7 +7,6 @@ from typing import Any, ClassVar, TypeVar, cast
 
 from .._base_classes import SerializableImageEmbedder
 from ..lazy_import import OptionalImport
-from ..typing import FloatNumpyArray, ImageInput
 
 with OptionalImport(package="torch", extra="nn") as _torch_import:
     import torch
@@ -17,7 +16,7 @@ with OptionalImport(package="torch", extra="nn") as _torch_import:
 _torch_import.check()
 
 #: On-disk format version of the serialised neural embedder state.
-_NEURAL_EMBEDDER_FORMAT_VERSION = 2
+_NEURAL_EMBEDDER_FORMAT_VERSION = 3
 
 _NeuralEmbedderT = TypeVar("_NeuralEmbedderT", bound="NeuralImageEmbedder")
 
@@ -39,23 +38,38 @@ class NeuralImageEmbedder(SerializableImageEmbedder, torch.nn.Module):
 
     :param similarity_func: Name of the built-in similarity metric to use. One of
         ``"cosine"`` (default), ``"euclidean"``, ``"l1"`` or ``"manhattan"``.
+    :param normalize: Whether ``embed`` L2-normalizes the embeddings it returns.
     :param batch_size: Maximum number of images processed in a single batch.
         Set to ``-1`` to process all images as a single batch.
     """
 
     #: Keys a serialised state must contain to be a valid embedder file.
     _STATE_KEYS: ClassVar[frozenset[str]] = frozenset(
-        {"embedder_class", "similarity_func", "batch_size", "config", "state_dict"}
+        {
+            "embedder_class",
+            "similarity_func",
+            "normalize",
+            "batch_size",
+            "config",
+            "state_dict",
+        }
     )
 
     def __init__(
-        self, similarity_func: str = "cosine", *, batch_size: int = 16
+        self,
+        similarity_func: str = "cosine",
+        *,
+        normalize: bool = True,
+        batch_size: int = 16,
     ) -> None:
         # torch.nn.Module.__init__ creates the attribute dicts that its
         # __setattr__ relies on, so it has to run before anything is assigned.
         torch.nn.Module.__init__(self)
         SerializableImageEmbedder.__init__(
-            self, similarity_func=similarity_func, batch_size=batch_size
+            self,
+            similarity_func=similarity_func,
+            normalize=normalize,
+            batch_size=batch_size,
         )
 
     def __setattr__(self, name: str, value: Any) -> None:
@@ -80,16 +94,6 @@ class NeuralImageEmbedder(SerializableImageEmbedder, torch.nn.Module):
             descriptor.__set__(self, value)
             return
         super().__setattr__(name, value)
-
-    @abc.abstractmethod
-    def embed(
-        self,
-        images: ImageInput,
-        *,
-        dims: str = "HWC",
-        value_range: tuple[float, float] = (0.0, 255.0),
-    ) -> FloatNumpyArray:
-        raise NotImplementedError
 
     @abc.abstractmethod
     def _serialization_config(self) -> dict[str, Any]:
@@ -129,6 +133,7 @@ class NeuralImageEmbedder(SerializableImageEmbedder, torch.nn.Module):
             "format_version": _NEURAL_EMBEDDER_FORMAT_VERSION,
             "embedder_class": type(self).__name__,
             "similarity_func": self._similarity_func_name,
+            "normalize": self.normalize,
             "batch_size": self.batch_size,
             "config": self._serialization_config(),
             "state_dict": encode_state_dict(self),
@@ -140,6 +145,7 @@ class NeuralImageEmbedder(SerializableImageEmbedder, torch.nn.Module):
     ) -> _NeuralEmbedderT:
         embedder = cast(_NeuralEmbedderT, cls._from_config(state["config"], **kwargs))
         embedder.similarity_func = state["similarity_func"]
+        embedder._restore_normalize(state)
         embedder._restore_batch_size(state)
         embedder.load_state_dict(decode_state_dict(state["state_dict"]))
         return embedder.eval()

@@ -98,14 +98,23 @@ def test_embed_shape_with_pca(
     assert out.shape == (1, VLAD_DIM_PCA)
 
 
-def test_embed_rows_l2_normalized(
+def test_cluster_rows_l2_normalized(
     vlad_no_pca: VLADEmbedder, checkerboard_image: ImageObj
 ) -> None:
-    """Each non-zero cluster row of the embedding has unit L2 norm."""
-    out = vlad_no_pca.embed([checkerboard_image.array]).reshape(8, 128)
+    """Each non-zero cluster row of the encoding has unit L2 norm."""
+    raw = VLADEmbedder.from_dict({**vlad_no_pca.to_dict(), "normalize": False})
+    out = raw.embed([checkerboard_image.array]).reshape(8, 128)
     norms = np.linalg.norm(out, axis=1)
     non_zero = norms[norms > 1e-6]
     assert non_zero == pytest.approx(np.ones_like(non_zero), rel=1e-3)
+
+
+def test_embed_rows_l2_normalized(
+    vlad_no_pca: VLADEmbedder, checkerboard_image: ImageObj
+) -> None:
+    """``embed`` returns unit-length rows while ``normalize`` is on."""
+    out = vlad_no_pca.embed([checkerboard_image.array])
+    assert np.linalg.norm(out, axis=1) == pytest.approx(np.ones(len(out)), rel=1e-5)
 
 
 def test_embed_single_rgb_image_ok(
