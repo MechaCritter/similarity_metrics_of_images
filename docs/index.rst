@@ -7,7 +7,7 @@ A Python library for image similarity analysis and retrieval.
    :maxdepth: 2
    :caption: Getting started
 
-   getting_started
+   getting_started/getting_started
 
 .. toctree::
    :maxdepth: 2
