@@ -190,3 +190,6 @@ logger_config.yaml.local
 # Generated benchmark artifacts
 docs/*/benchmarks/*.png
 docs/*/benchmarks/*.json
+
+# Logo files pulled from the 'assets' branch at documentation build time
+docs/sphinx/_static/*.png
