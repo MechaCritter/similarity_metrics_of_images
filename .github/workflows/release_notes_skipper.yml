@@ -17,6 +17,10 @@ on:
     paths-ignore:
       - "**.py"
       - "**.pyx"
+      - "**.pxd"
+      - "**.pyi"
+      - "**.h"
+      - "**.cpp"
       - "pyproject.toml"
       - "!.github/**/*.py"
       - "!scripts/**/*.py"
