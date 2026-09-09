@@ -24,6 +24,7 @@ from ..serialization import (
     embedder_to_dict,
 )
 from ..typing import (
+    BoolNumpyArray,
     Embedder,
     Float32NumpyArray,
     Float64NumpyArray,
@@ -528,9 +529,10 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
         """
         Replace every query embedding by its alpha-weighted query expansion.
 
-        Each query is searched once, the embeddings of its ``num_neighbours``
-        best matches are read back from the index, and the expansion is formed
-        from them by :func:`_alpha_query_expansion`.
+        The whole batch is searched once, the embeddings of every query's
+        ``num_neighbours`` best matches are read back from the index in a
+        single lookup, and all expansions are formed from them by one batched
+        call to :func:`_alpha_query_expansion`.
 
         :param queries: The ``(M, D)`` query embeddings.
         :param alpha: Exponent of the similarity weights.
@@ -549,13 +551,8 @@ class InMemoryImageEmbeddingStore(SerializerMixin):
             if found.any()
             else np.empty((0, queries.shape[1]), dtype=np.float32)
         )
-        blocks = np.split(neighbours, np.cumsum(found.sum(axis=1))[:-1])
-        return np.vstack(
-            [
-                _alpha_query_expansion(query, block, alpha)
-                for query, block in zip(queries, blocks, strict=True)
-            ]
-        )
+        blocks = _neighbour_blocks(neighbours, found, queries.shape[1])
+        return _alpha_query_expansion(queries, blocks, alpha)
 
     def _ranked_candidates(
         self,
@@ -742,13 +739,44 @@ def _unit_rows(matrix: FloatNumpyArray) -> Float64NumpyArray:
     return result
 
 
+def _neighbour_blocks(
+    neighbours: Float32NumpyArray,
+    found: BoolNumpyArray,
+    dim: int,
+) -> Float32NumpyArray:
+    """
+    Lay the vectors a search found out as one block of neighbours per query.
+
+    The empty slots of the search are filled with the zero vector, which
+    resembles no query and therefore weighs nothing in the expansion.
+
+    :param neighbours: The ``(N, D)`` vectors of the ids the search found, in
+        the row-major order of the search result.
+    :param found: The ``(M, k)`` mask marking the search slots that hold an id.
+    :param dim: Dimensionality of the embeddings.
+    :return: The ``(M, n, D)`` block of neighbours, one ``(n, D)`` set per
+        query.
+    """
+    num_queries, num_slots = found.shape
+    # Both built-in indexes answer every query of a batch with the same number
+    # of neighbours, so the vectors already lie in the order the blocks need
+    # and cutting them at that shared goal is a free reshape. Only an index
+    # that leaves a hole in one query's row alone has to be scattered.
+    goal = int(found[0].sum()) if num_queries else 0
+    if found[:, :goal].all() and not found[:, goal:].any():
+        return neighbours.reshape(num_queries, goal, dim)
+    blocks = np.zeros((num_queries, num_slots, dim), dtype=neighbours.dtype)
+    blocks[found] = neighbours
+    return blocks
+
+
 def _alpha_query_expansion(
     query: FloatNumpyArray,
     neighbours: FloatNumpyArray,
     alpha: float,
 ) -> Float32NumpyArray:
     """
-    Form the alpha-weighted query expansion (αQE) of one query.
+    Form the alpha-weighted query expansion (αQE) of one query or of a batch.
 
     Implements Section 3.5 of Radenović et al. [1]: the new query is the
     weighted average of the query and its top-ranked gallery descriptors, where
@@ -758,11 +786,18 @@ def _alpha_query_expansion(
     descriptor weighs the same and the expansion is the plain average query
     expansion (AQE).
 
-    :param query: The ``(D,)`` query embedding.
-    :param neighbours: The ``(n, D)`` embeddings of its top-ranked gallery
-        images.
+    A single ``(D,)`` query is expanded against its own ``(n, D)`` neighbours,
+    an ``(M, D)`` batch of queries against the ``(M, n, D)`` block holding the
+    neighbours of each of them, in one pass over the whole block.
+
+    :param query: The ``(D,)`` query embedding, or an ``(M, D)`` batch of them.
+    :param neighbours: The ``(n, D)`` embeddings of the query's top-ranked
+        gallery images, or the ``(M, n, D)`` block holding one such set per
+        query of a batch. A query with fewer than ``n`` neighbours pads the
+        free rows with the zero vector, which weighs nothing.
     :param alpha: Exponent of the similarity weights.
-    :return: The expanded query, an L2-normalised ``(D,)`` float32 vector.
+    :return: The expanded queries, L2-normalised and float32, shaped like
+        ``query``.
 
     References:
     ===========
@@ -770,26 +805,52 @@ def _alpha_query_expansion(
         with No Human Annotation," IEEE Transactions on Pattern Analysis and
         Machine Intelligence, vol. 41, no. 7, pp. 1655-1668, 2019.
     """
+    batched = np.ndim(query) > 1
+    unit_queries = _unit_rows(np.atleast_2d(query))
+    blocks = np.asarray(neighbours)
+    blocks = blocks if batched else blocks[None, ...]
+    # The products run in the precision the neighbours were handed over in. The
+    # float32 an index returns keeps the whole block out of the float64 copy
+    # that otherwise dominates the cost of a batch.
+    blocks = blocks.astype(np.promote_types(blocks.dtype, np.float32), copy=False)
     # The paper works on L2-normalised descriptors, whose inner product is the
-    # cosine similarity. The normalised copies make that hold whatever form the
-    # store indexed the vectors in.
-    unit_query = _unit_rows(np.reshape(query, (1, -1)))[0]
-    unit_neighbours = _unit_rows(neighbours)
+    # cosine similarity. Dividing the two products by the row norms afterwards
+    # makes that hold whatever form the store indexed the vectors in, without
+    # ever forming a normalised copy of the block.
+    norms = _block_row_norms(blocks)
+    products = blocks @ unit_queries.astype(blocks.dtype, copy=False)[:, :, None]
+    similarities = np.asarray(products[:, :, 0], dtype=np.float64) / norms
     # Weight of the i-th ranked image: (f(q)^T f(i))^alpha. Only a positive
     # similarity earns a weight: a dissimilar image contributes nothing, which
     # keeps the weight real for a non-integer alpha, never pushes the query
     # away along a direction unrelated to it, and leaves alpha=0 as the plain
     # average of the images that do resemble the query.
-    similarities = unit_neighbours @ unit_query
     positive = similarities > 0.0
     weights = np.zeros_like(similarities)
     weights[positive] = similarities[positive] ** alpha
     # The query joins the average with the weight of its own similarity,
     # (f(q)^T f(q))^alpha = 1. Dividing by the total weight would not change
     # the direction, so the sum goes straight to the normalisation.
-    expanded = unit_query + weights @ unit_neighbours
-    unit_expanded = _unit_rows(np.reshape(expanded, (1, -1)))[0]
-    return np.asarray(unit_expanded, dtype=np.float32)
+    scaled = (weights / norms).astype(blocks.dtype, copy=False)
+    expanded = unit_queries + (scaled[:, None, :] @ blocks)[:, 0, :]
+    unit_expanded: Float32NumpyArray = np.asarray(
+        _unit_rows(expanded), dtype=np.float32
+    )
+    return unit_expanded if batched else unit_expanded[0]
+
+
+def _block_row_norms(blocks: FloatNumpyArray) -> Float64NumpyArray:
+    """
+    L2-norm every row of a block of neighbours, reporting a zero row as one.
+
+    :param blocks: The ``(M, n, D)`` block of neighbours.
+    :return: The ``(M, n)`` row norms, as float64.
+    """
+    norms: Float64NumpyArray = np.sqrt(np.einsum("mnd,mnd->mn", blocks, blocks)).astype(
+        np.float64
+    )
+    norms[norms == 0.0] = 1.0
+    return norms
 
 
 def _validate_search_index(search_index: str | ExternalSearchIndex | None) -> None:
