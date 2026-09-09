@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.9.3] - 2026-09-09
 
 ### Added
 - Every similarity metric now takes a `batch_size` argument, exposes it as the
