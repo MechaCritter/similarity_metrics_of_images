@@ -3,8 +3,8 @@ Evaluation functions
 
 Top-level entry points for scoring the quality of the images a store retrieves.
 
-``pyvisim.eval``
-----------------
+API reference
+-------------
 
 .. automodule:: pyvisim.eval
    :members:

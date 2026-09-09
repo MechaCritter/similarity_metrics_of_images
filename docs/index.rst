@@ -28,4 +28,5 @@ together with all of their public methods.
    distance/index
    structural/index
    pixelwise/index
+   typing/index
    eval/index
