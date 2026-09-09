@@ -2,7 +2,7 @@ import abc
 import logging
 import pathlib
 from collections.abc import Sequence
-from typing import Any, ClassVar
+from typing import Any, ClassVar, cast
 
 import numpy as np
 
@@ -31,7 +31,10 @@ def _l2_normalize(vectors: FloatNumpyArray) -> FloatNumpyArray:
     :return: An ``(N, D)`` array whose non-zero rows have unit L2 norm.
     """
     norms = np.linalg.norm(vectors, axis=-1, keepdims=True)
-    return np.divide(vectors, norms, out=vectors.copy(), where=norms > 0)
+    return cast(
+        FloatNumpyArray,
+        np.divide(vectors, norms, out=vectors.copy(), where=norms > 0),
+    )
 
 
 class SimilarityMetric(abc.ABC):
