@@ -120,6 +120,13 @@ jobs:
           key: pyvisim-torch-${{ runner.os }}-${{ hashFiles('uv.lock') }}
           restore-keys: pyvisim-torch-${{ runner.os }}-
 
+      # On macOS the faiss-cpu and torch wheels each bundle their own OpenMP
+      # runtime, and faiss deadlocks when both are loaded in one process.
+      - name: Limit OpenMP to one thread on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "OMP_NUM_THREADS=1" >> "$GITHUB_ENV"
+
       - name: Run pytest with coverage
         run: uv run --group test pytest -m "not slow"
 
