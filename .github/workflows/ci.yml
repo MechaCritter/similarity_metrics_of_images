@@ -71,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     env:
       # Pin torchvision's checkpoint directory so the cache steps below restore
       # it to the same place on every runner OS.
@@ -120,6 +120,13 @@ jobs:
           key: pyvisim-torch-${{ runner.os }}-${{ hashFiles('uv.lock') }}
           restore-keys: pyvisim-torch-${{ runner.os }}-
 
+      # On macOS the faiss-cpu and torch wheels each bundle their own OpenMP
+      # runtime, and faiss deadlocks when both are loaded in one process.
+      - name: Limit OpenMP to one thread on macOS
+        if: runner.os == 'macOS'
+        shell: bash
+        run: echo "OMP_NUM_THREADS=1" >> "$GITHUB_ENV"
+
       - name: Run pytest with coverage
         run: uv run --group test pytest -m "not slow"
 
@@ -131,7 +138,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     env:
       # See the unit test job: both caches are restored to fixed paths. The slow
       # suite also pulls CLIP checkpoints from the Hugging Face hub.
