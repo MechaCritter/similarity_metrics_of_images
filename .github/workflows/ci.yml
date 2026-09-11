@@ -71,7 +71,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     env:
       # Pin torchvision's checkpoint directory so the cache steps below restore
       # it to the same place on every runner OS.
@@ -131,7 +131,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     env:
       # See the unit test job: both caches are restored to fixed paths. The slow
       # suite also pulls CLIP checkpoints from the Hugging Face hub.

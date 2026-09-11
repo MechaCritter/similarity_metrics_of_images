@@ -36,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-latest, windows-latest]
+        os: [ubuntu-latest, windows-latest, macos-latest]
     env:
       # Must match the paths and keys used by the CI workflow.
       TORCH_HOME: ${{ github.workspace }}/.cache/torch
