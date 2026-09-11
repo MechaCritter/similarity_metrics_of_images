@@ -1,0 +1,6 @@
+---
+features:
+  - |
+    macOS is now a supported operating system. The package metadata lists it
+    next to Linux and Windows, and the unit and slow test suites run on
+    ``macos-latest`` in CI.
