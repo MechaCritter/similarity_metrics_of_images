@@ -57,7 +57,7 @@ jobs:
         env:
           RELEASE_TAG: ${{ steps.release-tag.outputs.tag }}
         run: |
-          uvx --from 'reno<5' --with 'dulwich>=0.21.0,<1.0.0' \
+          uvx --from reno --with dulwich \
             reno report --no-show-source --ignore-cache \
             --version "$RELEASE_TAG" -o relnotes.rst
 

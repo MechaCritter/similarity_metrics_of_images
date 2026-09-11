@@ -106,6 +106,8 @@ docs = [
     "sphinx",
     "myst-parser",
     "furo",
+    # The release notes pages are generated with reno (docs/_ext/reno_pages.py).
+    {include-group = "release"},
 ]
 # Regenerating the checked-in C sources of the Cython kernels (make build-ext)
 build = [
@@ -127,8 +129,8 @@ bench = [
 ]
 # Release note management (reno). dulwich is reno's git backend.
 release = [
-    "reno<5",
-    "dulwich>=0.21.0,<1.0.0",
+    "reno",
+    "dulwich",
 ]
 
 # Per-platform wheel builds for the compiled extensions, run by the publish

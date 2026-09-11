@@ -29,3 +29,9 @@ A Python library for image similarity analysis and retrieval.
    :caption: Tutorials
 
    tutorials/tutorial
+
+.. toctree::
+   :maxdepth: 1
+   :caption: Release notes
+
+   release_notes/release_notes

@@ -5,14 +5,18 @@
 
 import importlib.metadata
 import importlib.util
+import sys
 from pathlib import Path
+
+# Local extensions live in docs/_ext/.
+sys.path.insert(0, str(Path(__file__).parent / "_ext"))
 
 # -- Project information -----------------------------------------------------
 # https://www.sphinx-doc.org/en/master/usage/configuration.html#project-information
 
 project = "pyvisim"
-copyright = "2026, Nhat Huy Vu"
-author = "Nhat Huy Vu"
+copyright = "2026, Nhật Huy Vũ"
+author = "Nhật Huy Vũ"
 
 release = importlib.metadata.version("pyvisim")
 version = ".".join(release.split(".")[:2])
@@ -25,6 +29,10 @@ extensions = [
     "sphinx.ext.intersphinx",
     "sphinx.ext.viewcode",
     "myst_parser",
+    # Generates one page per release from releasenotes/notes/. reno reads the
+    # notes of each version from the git history and its tags, so the
+    # documentation has to be built from a git checkout.
+    "reno_pages",
 ]
 
 templates_path = ["_templates"]
@@ -54,7 +62,7 @@ suppress_warnings = ["myst.xref_missing", "myst.header"]
 # still import every module.
 autodoc_mock_imports = [
     module
-    for module in ("torch", "torchvision", "torchaudio", "open_clip")
+    for module in ("torch", "torchvision")
     if importlib.util.find_spec(module) is None
 ]
 
