@@ -460,7 +460,7 @@ to be as little dependent on OpenCV as possible.
 
 ## [v0.5.1] - 2026-06-19
 
-## Fixed
+### Fixed
 - The method `_from_config` of `DeepConvFeature` was using the deprecated
   `model` argument instead of `backbone`. This version only fixed that.
 

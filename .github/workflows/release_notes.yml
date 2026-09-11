@@ -71,7 +71,7 @@ jobs:
       # compiled extensions of this package.
       - name: Verify release notes formatting
         if: steps.changed-files.outputs.any_changed == 'true' && !contains( github.event.pull_request.labels.*.name, 'ignore-for-release-notes')
-        run: uvx --from 'reno<5' --with 'dulwich>=0.21.0,<1.0.0' reno lint .  # reno lint takes no file list
+        run: uvx --from reno --with dulwich reno lint .  # reno lint takes no file list
 
       - name: Check reStructuredText code formatting
         if: steps.changed-files.outputs.any_changed == 'true' && !contains( github.event.pull_request.labels.*.name, 'ignore-for-release-notes')
