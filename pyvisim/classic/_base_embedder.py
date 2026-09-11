@@ -1,3 +1,4 @@
+import abc
 import warnings
 from collections.abc import Iterator
 from typing import Any, ClassVar, TypeVar
@@ -25,13 +26,13 @@ _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION = 3
 _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION_COMPATIBILITY: dict[tuple[int, int], bool] = {
     # Version 2 adds the "batch_size" key, which version 1 ignores but version 2
     # requires, so the compatibility only holds in one direction.
-    (1, 2): True,  # version 1 can read files from version 2
-    (2, 1): False,  # version 2 cannot read files from version 1
+    (1, 2): True,
+    (2, 1): False,
     # Version 3 adds the "normalize" key the same way.
-    (1, 3): True,  # version 1 can read files from version 3
-    (2, 3): True,  # version 2 can read files from version 3
-    (3, 1): False,  # version 3 cannot read files from version 1
-    (3, 2): False,  # version 3 cannot read files from version 2
+    (1, 3): True,
+    (2, 3): True,
+    (3, 1): False,
+    (3, 2): False,
     #
     # TODO: when the next _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION comes, check if
     # it's forward / backward compatible, then add entries like the ones above.
@@ -345,6 +346,25 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
         if self.pca:
             return self.pca.transform(descriptors.astype(np.float32))
         return descriptors
+
+    def _embed(self, images: list[UInt8NumpyArray]) -> FloatNumpyArray:
+        return self._encode_batch(*self._extract_descriptors(images))
+
+    @abc.abstractmethod
+    def _encode_batch(
+        self, descriptors: Float32NumpyArray, counts: IntNumpyArray
+    ) -> FloatNumpyArray:
+        """
+        Encodes the stacked descriptors of one image batch into embeddings.
+
+        Every subclass has to implement this method.
+
+        :param descriptors: The ``(N, D)`` descriptors of the batch, stacked in
+            image order.
+        :param counts: How many of the ``N`` rows belong to each image.
+        :return: The embeddings of the batch.
+        """
+        raise NotImplementedError
 
     def learn(
         self,

@@ -8,7 +8,6 @@ from ..typing import (
     Float64NumpyArray,
     FloatNumpyArray,
     IntNumpyArray,
-    UInt8NumpyArray,
 )
 from ._base_embedder import ClusteringBasedEmbedder
 from ._clustering import PCA, ClusteringModelBase, DiagCovarGaussianMixture
@@ -103,9 +102,6 @@ class FisherVectorEmbedder(ClusteringBasedEmbedder):
                 f"The clustering model must be an instance of pyvisim.classic._clustering.DiagCovarGaussianMixture, not {type(clustering_model)}"
             )
         super()._set_clustering_model(clustering_model)
-
-    def _embed(self, images: list[UInt8NumpyArray]) -> Float64NumpyArray:
-        return self._encode_batch(*self._extract_descriptors(images))
 
     def _sufficient_statistics(
         self, descriptors: FloatNumpyArray, counts: IntNumpyArray

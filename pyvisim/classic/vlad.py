@@ -6,7 +6,6 @@ from .._base_classes import FeatureExtractorBase
 from ..typing import (
     Float32NumpyArray,
     IntNumpyArray,
-    UInt8NumpyArray,
 )
 from ._base_embedder import ClusteringBasedEmbedder
 from ._clustering import PCA, ClusteringModelBase, KMeans
@@ -132,9 +131,6 @@ class VLADEmbedder(ClusteringBasedEmbedder):
                 f"The clustering model must be an instance of pyvisim.classic._clustering.KMeans, not {type(clustering_model)}"
             )
         super()._set_clustering_model(clustering_model)
-
-    def _embed(self, images: list[UInt8NumpyArray]) -> Float32NumpyArray:
-        return self._encode_batch(*self._extract_descriptors(images))
 
     def _encode_batch(
         self, descriptors: Float32NumpyArray, counts: IntNumpyArray
