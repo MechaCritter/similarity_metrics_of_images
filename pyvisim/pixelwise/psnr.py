@@ -5,11 +5,10 @@ from __future__ import annotations
 import numpy as np
 
 from .._base_classes import SimilarityMetric
-from ..features._utils import grayscale_dims
 from ..lazy_import import is_tensor
 from ..typing import Float64NumpyArray, ImageInput, UInt8NumpyArray
 from ..utils.cython_utils import get_kernel_threads
-from ..utils.image_utils import iter_images
+from ..utils.image_utils import grayscale_dims, iter_images
 from ._kernel._ssd_kernel import ssd_matrix
 
 __all__ = ["PSNR"]

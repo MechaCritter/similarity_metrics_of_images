@@ -4,9 +4,32 @@ from collections.abc import Iterable, Iterator
 import numpy as np
 
 from .._errors import InvalidImageError
-from ..features._utils import grayscale_dims
 from ..lazy_import import is_tensor
-from ..typing import ImageInput, UInt8NumpyArray, _to_image_list
+from ..typing import ImageInput, MatLike, UInt8NumpyArray, _to_image_list
+
+
+def grayscale_dims(image: MatLike, dims: str) -> str:
+    """
+    Drop the channel label from ``dims`` for a single-channel (grayscale) image.
+
+    A grayscale image carries no channel axis, so an array with exactly one
+    fewer dimension than a channel-bearing ``dims`` (e.g. a 2-D array with the
+    default ``"HWC"``) is treated as single-channel and the ``"C"`` label is
+    removed. This keeps the canonical ``(H, W)`` grayscale layout working with
+    the channel-bearing default, matching the NumPy-only behaviour the library
+    accepted before ``dims`` were introduced.
+
+    :param image: The image whose axis count is inspected.
+    :param dims: The requested axis-label string.
+    :return: ``dims`` with ``"C"`` removed when ``image`` is single-channel,
+        otherwise ``dims`` unchanged.
+    """
+    normalized = dims.upper()
+    if "C" not in normalized:
+        return dims
+    if np.ndim(image) == len(normalized) - 1:
+        return normalized.replace("C", "")
+    return dims
 
 
 def iter_images(
