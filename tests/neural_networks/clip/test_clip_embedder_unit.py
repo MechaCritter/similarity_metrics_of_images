@@ -11,7 +11,6 @@ slow suite.
 
 from __future__ import annotations
 
-from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -227,14 +226,13 @@ def test_the_last_batch_holds_the_remaining_images(
 ) -> None:
     """The last batch holds ``N % batch_size`` images, however small ``N`` is."""
     batch_lengths: list[int] = []
-    iter_batches = clip_embedder_module.iter_image_batches
+    embed_batch = embedder._embed
 
-    def record(images: object, size: int, **kwargs: object) -> Iterator[list[object]]:
-        for batch in iter_batches(images, size, **kwargs):  # type: ignore[arg-type]
-            batch_lengths.append(len(batch))
-            yield batch
+    def record(images: list[np.ndarray]) -> np.ndarray:
+        batch_lengths.append(len(images))
+        return embed_batch(images)
 
-    monkeypatch.setattr(clip_embedder_module, "iter_image_batches", record)
+    monkeypatch.setattr(embedder, "_embed", record)
     embedder.set_batch_size(batch_size)
     embedder.embed([_random_image(seed) for seed in range(n_images)])
     assert batch_lengths[-1] == n_images % batch_size

@@ -7,8 +7,8 @@ from ..typing import (
     Float32NumpyArray,
     Float64NumpyArray,
     FloatNumpyArray,
-    ImageInput,
     IntNumpyArray,
+    UInt8NumpyArray,
 )
 from ._base_embedder import ClusteringBasedEmbedder
 from ._clustering import PCA, ClusteringModelBase, DiagCovarGaussianMixture
@@ -104,20 +104,8 @@ class FisherVectorEmbedder(ClusteringBasedEmbedder):
             )
         super()._set_clustering_model(clustering_model)
 
-    def _embed(
-        self,
-        images: ImageInput,
-        *,
-        dims: str = "HWC",
-        value_range: tuple[float, float] = (0.0, 255.0),
-    ) -> Float64NumpyArray:
-        all_embeddings = [
-            self._encode_batch(descriptors, counts)
-            for descriptors, counts in self._iter_descriptor_batches(
-                images, dims=dims, value_range=value_range
-            )
-        ]
-        return np.vstack(all_embeddings)
+    def _embed(self, images: list[UInt8NumpyArray]) -> Float64NumpyArray:
+        return self._encode_batch(*self._extract_descriptors(images))
 
     def _sufficient_statistics(
         self, descriptors: FloatNumpyArray, counts: IntNumpyArray

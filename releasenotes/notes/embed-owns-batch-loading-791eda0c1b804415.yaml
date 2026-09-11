@@ -1,0 +1,13 @@
+---
+upgrade:
+  - |
+    Subclasses outside the library that implement ``_embed`` now receive one
+    batch as a list of canonical ``uint8`` ``(H, W[, C])`` images, without
+    ``dims`` and ``value_range``, since ``ImageEmbedderBase.embed`` normalizes
+    and batches the input. Drop the two parameters and the batching loop from
+    your ``_embed``.
+enhancements:
+  - |
+    Every embedder rejects an empty input with the same ``ValueError``
+    ("Expected at least one image, got none.") instead of a NumPy concatenation
+    error or an embedder-specific message.

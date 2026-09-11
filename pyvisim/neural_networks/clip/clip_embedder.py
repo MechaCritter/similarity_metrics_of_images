@@ -18,10 +18,8 @@ from ..._base_classes import SerializableImageEmbedder
 from ...lazy_import import OptionalImport
 from ...typing import (
     Float32NumpyArray,
-    ImageInput,
     UInt8NumpyArray,
 )
-from ...utils.image_utils import iter_image_batches
 from ._registry import (
     CheckpointSpec,
     VisionConfig,
@@ -281,33 +279,10 @@ class ClipEmbedder(SerializableImageEmbedder):
         return cast(torch.Tensor, self._transform(pil_image))
 
     @torch.no_grad()
-    def _embed_batch(self, batch: list[UInt8NumpyArray]) -> Float32NumpyArray:
-        """
-        Runs one batch of canonical images through the image tower.
-
-        :param batch: Canonical ``uint8`` images of shape ``(H, W[, C])``.
-        :return: The ``(len(batch), embedding_dim)`` embeddings.
-        """
-        tensors = torch.stack([self._preprocess(image) for image in batch])
+    def _embed(self, images: list[UInt8NumpyArray]) -> Float32NumpyArray:
+        tensors = torch.stack([self._preprocess(image) for image in images])
         features = self._model(tensors.to(self._device))
         return np.asarray(features.float().cpu().numpy(), dtype=np.float32)
-
-    def _embed(
-        self,
-        images: ImageInput,
-        *,
-        dims: str = "HWC",
-        value_range: tuple[float, float] = (0.0, 255.0),
-    ) -> Float32NumpyArray:
-        embeddings = [
-            self._embed_batch(batch)
-            for batch in iter_image_batches(
-                images, self.batch_size, dims=dims, value_range=value_range
-            )
-        ]
-        if not embeddings:
-            raise ValueError("Expected at least one image to embed, got none.")
-        return np.vstack(embeddings)
 
     def __repr__(self) -> str:
         return (

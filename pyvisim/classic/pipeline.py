@@ -6,10 +6,8 @@ import numpy as np
 from .._base_classes import SerializableImageEmbedder
 from ..typing import (
     FloatNumpyArray,
-    ImageInput,
     UInt8NumpyArray,
 )
-from ..utils.image_utils import iter_image_batches
 
 #: On-disk format version of the serialised pipeline state.
 _PIPELINE_FORMAT_VERSION = 3
@@ -94,29 +92,7 @@ class Pipeline(SerializableImageEmbedder):
         pipeline._restore_batch_size(state)
         return pipeline
 
-    def _embed(
-        self,
-        images: ImageInput,
-        *,
-        dims: str = "HWC",
-        value_range: tuple[float, float] = (0.0, 255.0),
-    ) -> FloatNumpyArray:
-        all_embeddings = [
-            self._embed_batch(batch)
-            for batch in iter_image_batches(
-                images, self.batch_size, dims=dims, value_range=value_range
-            )
-        ]
-        return np.vstack(all_embeddings)
-
-    def _embed_batch(self, batch: list[UInt8NumpyArray]) -> FloatNumpyArray:
-        """
-        Embeds one batch of images with every embedder and joins the results.
-
-        :param batch: Canonical ``uint8`` images of shape ``(H, W[, C])``.
-        :return: A ``(len(batch), total_feature_dim)`` array holding the
-            embedders' vectors side by side, in the pipeline's order.
-        """
+    def _embed(self, images: list[UInt8NumpyArray]) -> FloatNumpyArray:
         all_embeddings = []
         for metric in self.embedders:
             # Each embedder has to be flattened to be usable here. Embedders that
@@ -128,10 +104,11 @@ class Pipeline(SerializableImageEmbedder):
                 metric.flatten = True  # type: ignore[attr-defined]
             try:
                 # Each of size (num_imgs, feature_dim)
-                all_embeddings.append(metric.embed(batch))
+                all_embeddings.append(metric.embed(images))
             finally:
                 if has_flatten:
                     metric.flatten = original_flatten  # type: ignore[attr-defined]
+        # The embedders' vectors sit side by side, in the pipeline's order.
         return np.hstack(all_embeddings)
 
     # def fit(self, images: Iterable[np.ndarray], reduce_dimension: bool = False, reduce_factor: int=2) -> None:

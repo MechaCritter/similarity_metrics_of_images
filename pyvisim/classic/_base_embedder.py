@@ -14,6 +14,7 @@ from ..typing import (
     FloatNumpyArray,
     ImageInput,
     IntNumpyArray,
+    UInt8NumpyArray,
 )
 from ..utils.image_utils import iter_image_batches
 from ._clustering import PCA, ClusteringModelBase
@@ -308,22 +309,36 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
         Generator that yields the stacked descriptors of one image batch at a
         time.
 
-        Every image of a batch reaches the feature extractor in a single
+        """
+        for batch in iter_image_batches(
+            images, self.batch_size, dims=dims, value_range=value_range
+        ):
+            yield self._extract_descriptors(batch)
+
+    def _extract_descriptors(
+        self, images: list[UInt8NumpyArray]
+    ) -> tuple[Float32NumpyArray, IntNumpyArray]:
+        """
+        Extracts the local descriptors of one image batch and stacks them.
+
+        Every image of the batch reaches the feature extractor in a single
         :meth:`~pyvisim._base_classes.FeatureExtractorBase.extract_batch` call,
         and the descriptors it returns are concatenated into one ``(N, D)``
         array. Whatever runs next (the PCA, the clustering model) therefore
         sees the batch as one matrix instead of one image at a time. The
         descriptors are the raw extractor output: the PCA is left to
         :meth:`_project`, since :meth:`learn` has to fit it on them first.
+
+        :param images: One batch of canonical ``uint8`` images of shape
+            ``(H, W[, C])``.
+        :return: The ``(N, D)`` descriptors of the batch, stacked in image
+            order, and how many of the ``N`` rows belong to each image.
         """
-        for batch in iter_image_batches(
-            images, self.batch_size, dims=dims, value_range=value_range
-        ):
-            # The batch holds canonical uint8 (H, W[, C]) images already, so
-            # the extractor is called with the default dims and value range.
-            per_image = self.feature_extractor.extract_batch(batch)
-            counts = np.array([len(features) for features in per_image], dtype=np.intp)
-            yield np.concatenate(per_image), counts
+        # The batch holds canonical uint8 (H, W[, C]) images already, so the
+        # extractor is called with the default dims and value range.
+        per_image = self.feature_extractor.extract_batch(images)
+        counts = np.array([len(features) for features in per_image], dtype=np.intp)
+        return np.concatenate(per_image), counts
 
     def _project(self, descriptors: FloatNumpyArray) -> FloatNumpyArray:
         """Reduces descriptors with the configured PCA, if there is one."""

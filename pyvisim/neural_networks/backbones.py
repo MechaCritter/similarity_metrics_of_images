@@ -12,7 +12,7 @@ import numpy as np
 from PIL import Image
 
 from ..lazy_import import OptionalImport
-from ..typing import FloatNumpyArray, ImageInput, MatLike
+from ..typing import FloatNumpyArray, ImageInput, MatLike, UInt8NumpyArray
 from ..utils.image_utils import iter_image_batches
 from ._base import NeuralImageEmbedder
 
@@ -320,6 +320,28 @@ class BackboneWithHead(NeuralImageEmbedder):
         return cast(torch.Tensor, self._transform(pil_image))
 
     @torch.no_grad()
+    def _forward_batch(self, images: list[UInt8NumpyArray]) -> torch.Tensor:
+        """
+        Runs one batch of canonical images through the shared-weight pass.
+
+        The model is switched to eval mode so that ``BatchNorm`` and
+        ``Dropout`` behave correctly during inference, and the previous
+        training state is restored afterwards so the training loop is not
+        disrupted.
+
+        :param images: One batch of canonical ``uint8`` images of shape
+            ``(H, W[, C])``.
+        :return: ``(len(images), embedding_dim)`` tensor on the model's device.
+        """
+        was_training = self.training
+        self.eval()
+        try:
+            batch = torch.stack([self._preprocess(image) for image in images])
+            return self._forward_once(batch.to(self.device))
+        finally:
+            if was_training:
+                self.train()
+
     def _embed_images(
         self,
         images: ImageInput,
@@ -330,12 +352,6 @@ class BackboneWithHead(NeuralImageEmbedder):
         """
         Embeds one or more images into a batch of shared-weight pass outputs.
 
-        The images are preprocessed and passed through :meth:`_forward_once` in
-        batches of at most :attr:`batch_size`, which bounds how much activation
-        memory one forward pass needs. The model is switched to eval mode so
-        that ``BatchNorm`` and ``Dropout`` behave correctly during inference,
-        and the previous training state is restored afterwards so the training
-        loop is not disrupted.
 
         :param images: A single ``MatLike`` image, a batched array, or an
             iterable of images.
@@ -347,35 +363,18 @@ class BackboneWithHead(NeuralImageEmbedder):
         :return: ``(N, embedding_dim)`` tensor on the model's device.
         :raises ValueError: If ``images`` contains no image.
         """
-        was_training = self.training
-        self.eval()
-        try:
-            embeddings = [
-                self._forward_once(
-                    torch.stack([self._preprocess(image) for image in batch]).to(
-                        self.device
-                    )
-                )
-                for batch in iter_image_batches(
-                    images, self.batch_size, dims=dims, value_range=value_range
-                )
-            ]
-            if not embeddings:
-                raise ValueError("Expected at least one image to embed, got none.")
-            return torch.cat(embeddings)
-        finally:
-            if was_training:
-                self.train()
+        embeddings = [
+            self._forward_batch(batch)
+            for batch in iter_image_batches(
+                images, self.batch_size, dims=dims, value_range=value_range
+            )
+        ]
+        if not embeddings:
+            raise ValueError("Expected at least one image to embed, got none.")
+        return torch.cat(embeddings)
 
-    def _embed(
-        self,
-        images: ImageInput,
-        *,
-        dims: str = "HWC",
-        value_range: tuple[float, float] = (0.0, 255.0),
-    ) -> FloatNumpyArray:
-        embeddings = self._embed_images(images, dims=dims, value_range=value_range)
-        return cast(FloatNumpyArray, embeddings.cpu().numpy())
+    def _embed(self, images: list[UInt8NumpyArray]) -> FloatNumpyArray:
+        return cast(FloatNumpyArray, self._forward_batch(images).cpu().numpy())
 
     @property
     def backbone(self) -> torch.nn.Module:
