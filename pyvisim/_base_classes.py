@@ -14,7 +14,9 @@ from .typing import (
     ImageInput,
     MatLike,
     SimilarityFunc,
+    UInt8NumpyArray,
 )
+from .utils.image_utils import iter_image_batches
 
 #: Suffix of the files written by :meth:`SerializableImageEmbedder.save_to_disk`.
 EMBEDDER_FILE_SUFFIX = ".embedder"
@@ -324,34 +326,28 @@ class ImageEmbedderBase(SimilarityMetric):
             converted into the canonical ``[0, 255]`` range.
         :return: vector representations of the given images, L2-normalized
             row by row if :attr:`normalize` is True.
+        :raises ValueError: If ``images`` holds no image.
         """
-        vectors = self._embed(images, dims=dims, value_range=value_range)
+        embeddings = [
+            self._embed(batch)
+            for batch in iter_image_batches(
+                images, self.batch_size, dims=dims, value_range=value_range
+            )
+        ]
+        if not embeddings:
+            raise ValueError("Expected at least one image, got none.")
+        vectors = np.vstack(embeddings)
         return _l2_normalize(vectors) if self._normalize else vectors
 
     @abc.abstractmethod
-    def _embed(
-        self,
-        images: ImageInput,
-        *,
-        dims: str = "HWC",
-        value_range: tuple[float, float] = (0.0, 255.0),
-    ) -> FloatNumpyArray:
+    def _embed(self, images: list[UInt8NumpyArray]) -> FloatNumpyArray:
         """
-        Embeds one or more images, without the L2 normalization.
+        Embeds one batch of images, without the L2 normalization.
 
-        Every subclass has to implement this method.
+        Every subclass has to implement this method
 
-        :param images: A single ``MatLike`` image, a batched array, or an
-            iterable of images. Consider using an iterator for large datasets.
-        :param dims: Axis-label string, one character per array axis in order:
-            ``"H"`` = height (rows), ``"W"`` = width (columns), ``"C"`` = channels
-            (e.g. RGB), ``"B"`` = batch size. For example, ``"HWC"`` is height ×
-            width × channels (NumPy/OpenCV single-image layout, **default**);
-            ``"CHW"`` is channels × height × width (PyTorch single-image layout);
-            ``"BCHW"`` is batch × channels × height × width (PyTorch batched layout).
-            See :mod:`pyvisim.typing`.
-        :param value_range: The ``(low, high)`` range the input values live in;
-            converted into the canonical ``[0, 255]`` range.
+        :param images: One batch of at most :attr:`batch_size` canonical
+            ``uint8`` images of shape ``(H, W[, C])``.
         :return: vector representations of the given images without L2 normalization.
         """
         raise NotImplementedError

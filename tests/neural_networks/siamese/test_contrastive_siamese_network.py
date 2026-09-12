@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import math
-from collections.abc import Iterator
 from pathlib import Path
 
 import numpy as np
@@ -14,7 +13,6 @@ from torchvision import transforms
 from pyvisim._errors import InvalidImageError
 from pyvisim.datasets import OxfordFlowerDataset
 from pyvisim.neural_networks import ContrastiveSiameseNetwork
-from pyvisim.neural_networks import backbones as backbones_module
 
 from .._stubs import (
     FlattenBackbone,
@@ -511,14 +509,13 @@ def test_the_last_batch_holds_the_remaining_images(
 ) -> None:
     """The last batch holds ``N % batch_size`` images, however small ``N`` is."""
     batch_lengths: list[int] = []
-    iter_batches = backbones_module.iter_image_batches
+    embed_batch = contrastive_model._embed
 
-    def record(images: object, size: int, **kwargs: object) -> Iterator[list[object]]:
-        for batch in iter_batches(images, size, **kwargs):  # type: ignore[arg-type]
-            batch_lengths.append(len(batch))
-            yield batch
+    def record(images: list[np.ndarray]) -> np.ndarray:
+        batch_lengths.append(len(images))
+        return embed_batch(images)
 
-    monkeypatch.setattr(backbones_module, "iter_image_batches", record)
+    monkeypatch.setattr(contrastive_model, "_embed", record)
     contrastive_model.set_batch_size(batch_size)
     contrastive_model.embed([make_random_rgb_image(seed) for seed in range(n_images)])
     assert batch_lengths[-1] == n_images % batch_size

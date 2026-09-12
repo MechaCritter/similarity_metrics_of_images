@@ -10,7 +10,7 @@ import pytest
 import torch
 
 from pyvisim._errors import NotFittedError
-from pyvisim.classic import VLADEmbedder, _base_embedder
+from pyvisim.classic import VLADEmbedder
 from pyvisim.classic._clustering import DiagCovarGaussianMixture, KMeans
 from pyvisim.serialization import EMBEDDER_METADATA_KEY, save_state
 
@@ -263,14 +263,13 @@ def test_the_last_batch_holds_the_remaining_images(
 ) -> None:
     """The last batch holds ``N % batch_size`` images, however small ``N`` is."""
     batch_lengths: list[int] = []
-    iter_batches = _base_embedder.iter_image_batches
+    embed_batch = batched_vlad._embed
 
-    def record(images: object, size: int, **kwargs: object) -> Iterator[list[object]]:
-        for batch in iter_batches(images, size, **kwargs):  # type: ignore[arg-type]
-            batch_lengths.append(len(batch))
-            yield batch
+    def record(images: list[np.ndarray]) -> np.ndarray:
+        batch_lengths.append(len(images))
+        return embed_batch(images)
 
-    monkeypatch.setattr(_base_embedder, "iter_image_batches", record)
+    monkeypatch.setattr(batched_vlad, "_embed", record)
     batched_vlad.set_batch_size(batch_size)
     batched_vlad.embed(category_train_images_flat[:n_images])
     assert batch_lengths[-1] == n_images % batch_size

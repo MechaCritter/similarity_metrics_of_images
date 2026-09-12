@@ -1,3 +1,4 @@
+import abc
 import warnings
 from collections.abc import Iterator
 from typing import Any, ClassVar, TypeVar
@@ -14,6 +15,7 @@ from ..typing import (
     FloatNumpyArray,
     ImageInput,
     IntNumpyArray,
+    UInt8NumpyArray,
 )
 from ..utils.image_utils import iter_image_batches
 from ._clustering import PCA, ClusteringModelBase
@@ -24,13 +26,13 @@ _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION = 3
 _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION_COMPATIBILITY: dict[tuple[int, int], bool] = {
     # Version 2 adds the "batch_size" key, which version 1 ignores but version 2
     # requires, so the compatibility only holds in one direction.
-    (1, 2): True,  # version 1 can read files from version 2
-    (2, 1): False,  # version 2 cannot read files from version 1
+    (1, 2): True,
+    (2, 1): False,
     # Version 3 adds the "normalize" key the same way.
-    (1, 3): True,  # version 1 can read files from version 3
-    (2, 3): True,  # version 2 can read files from version 3
-    (3, 1): False,  # version 3 cannot read files from version 1
-    (3, 2): False,  # version 3 cannot read files from version 2
+    (1, 3): True,
+    (2, 3): True,
+    (3, 1): False,
+    (3, 2): False,
     #
     # TODO: when the next _CLUSTERING_EMBEDDER_FILE_FORMAT_VERSION comes, check if
     # it's forward / backward compatible, then add entries like the ones above.
@@ -308,28 +310,61 @@ class ClusteringBasedEmbedder(FeatureBasedEmbedder):
         Generator that yields the stacked descriptors of one image batch at a
         time.
 
-        Every image of a batch reaches the feature extractor in a single
+        """
+        for batch in iter_image_batches(
+            images, self.batch_size, dims=dims, value_range=value_range
+        ):
+            yield self._extract_descriptors(batch)
+
+    def _extract_descriptors(
+        self, images: list[UInt8NumpyArray]
+    ) -> tuple[Float32NumpyArray, IntNumpyArray]:
+        """
+        Extracts the local descriptors of one image batch and stacks them.
+
+        Every image of the batch reaches the feature extractor in a single
         :meth:`~pyvisim._base_classes.FeatureExtractorBase.extract_batch` call,
         and the descriptors it returns are concatenated into one ``(N, D)``
         array. Whatever runs next (the PCA, the clustering model) therefore
         sees the batch as one matrix instead of one image at a time. The
         descriptors are the raw extractor output: the PCA is left to
         :meth:`_project`, since :meth:`learn` has to fit it on them first.
+
+        :param images: One batch of canonical ``uint8`` images of shape
+            ``(H, W[, C])``.
+        :return: The ``(N, D)`` descriptors of the batch, stacked in image
+            order, and how many of the ``N`` rows belong to each image.
         """
-        for batch in iter_image_batches(
-            images, self.batch_size, dims=dims, value_range=value_range
-        ):
-            # The batch holds canonical uint8 (H, W[, C]) images already, so
-            # the extractor is called with the default dims and value range.
-            per_image = self.feature_extractor.extract_batch(batch)
-            counts = np.array([len(features) for features in per_image], dtype=np.intp)
-            yield np.concatenate(per_image), counts
+        # The batch holds canonical uint8 (H, W[, C]) images already, so the
+        # extractor is called with the default dims and value range.
+        per_image = self.feature_extractor.extract_batch(images)
+        counts = np.array([len(features) for features in per_image], dtype=np.intp)
+        return np.concatenate(per_image), counts
 
     def _project(self, descriptors: FloatNumpyArray) -> FloatNumpyArray:
         """Reduces descriptors with the configured PCA, if there is one."""
         if self.pca:
             return self.pca.transform(descriptors.astype(np.float32))
         return descriptors
+
+    def _embed(self, images: list[UInt8NumpyArray]) -> FloatNumpyArray:
+        return self._encode_batch(*self._extract_descriptors(images))
+
+    @abc.abstractmethod
+    def _encode_batch(
+        self, descriptors: Float32NumpyArray, counts: IntNumpyArray
+    ) -> FloatNumpyArray:
+        """
+        Encodes the stacked descriptors of one image batch into embeddings.
+
+        Every subclass has to implement this method.
+
+        :param descriptors: The ``(N, D)`` descriptors of the batch, stacked in
+            image order.
+        :param counts: How many of the ``N`` rows belong to each image.
+        :return: The embeddings of the batch.
+        """
+        raise NotImplementedError
 
     def learn(
         self,

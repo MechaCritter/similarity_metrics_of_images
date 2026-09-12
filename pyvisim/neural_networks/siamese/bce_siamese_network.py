@@ -110,7 +110,7 @@ class BCESiameseNetwork(BackboneWithHead):
         features = self._backbone(x)
         return torch.sigmoid(self._head(features))
 
-    def _embed(
+    def embed(
         self,
         images: ImageInput,
         *,

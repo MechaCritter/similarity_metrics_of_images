@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -140,7 +139,7 @@ def test_load_clustering_model_from_sklearn_fisher() -> None:
 class _NoModelEmbedder(ClusteringBasedEmbedder):
     """Minimal concrete embedder used to test the "no clustering model" path."""
 
-    def _embed(self, images: Iterable[np.ndarray], flatten: bool = True) -> np.ndarray:
+    def _encode_batch(self, descriptors: np.ndarray, counts: np.ndarray) -> np.ndarray:
         """Unused stub; ``learn`` fails before embedding is ever reached."""
         raise NotImplementedError
 
